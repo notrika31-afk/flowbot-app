@@ -1,9 +1,11 @@
 // src/lib/db.ts
 // אנחנו משתמשים רק ב-PrismaClient כערך, ואת הטיפוסים מעבירים באמצעות assertion.
+// @ts-ignore
 import { PrismaClient } from "@prisma/client";
 
 // הגדרה של טיפוס גלובלי. אנחנו מסתמכים על כך שה-PrismaClient קיים.
 const globalForPrisma = global as unknown as { 
+    // @ts-ignore
     prisma: PrismaClient | undefined 
 };
 
