@@ -1,19 +1,14 @@
-// force update vercel
 import { NextRequest, NextResponse } from "next/server";
 import { getUserSession } from "@/lib/auth";
 import { createOAuthClient } from "@/lib/google";
 import { prisma } from "@/lib/prisma";
 
-// מחקנו את השורה הבעייתית: import { IntegrationProvider } from "@prisma/client";
+export const dynamic = "force-dynamic";
 
-export const dynamic = "force-dynamic"; // VERCEL_FIX_1
-
-function mapSlugToPrismaEnum(slug: string): any { // שינינו את ה-Return Type ל-any כדי למנוע שגיאות
+function mapSlugToPrismaEnum(slug: string): any {
   const normalizedSlug = slug.trim().toLowerCase().replace(/-/g, "_");
   const expectedEnumName = normalizedSlug.toUpperCase();
   
-  // במקום להסתמך על ה-Enum שלא נמצא, אנחנו בודקים מול רשימה ידנית בטוחה
-  // זה מונע את הקריסה ב-Vercel
   const VALID_PROVIDERS = [
       "GOOGLE", 
       "GOOGLE_CALENDAR", 
@@ -70,11 +65,9 @@ export async function GET(
     let userId = "";
     const session = await getUserSession();
     
-    // שלב א: נסה לקחת מהסשן
     if (session && session.id) {
         userId = session.id;
     } 
-    // שלב ב: אם אין סשן, קח מה-URL (State)
     else if (stateUserId) {
         console.log(`[Auth Callback] Session lost, attempting to use State ID: ${stateUserId}`);
         userId = stateUserId;
@@ -82,7 +75,6 @@ export async function GET(
         return NextResponse.redirect(createRedirectUrl({ error: "unauthorized_no_user" }));
     }
 
-    // שלב ג: בדיקה מול הדאטה-בייס
     const userExists = await prisma.user.findUnique({
         where: { id: userId },
         select: { id: true }
@@ -96,11 +88,16 @@ export async function GET(
         }));
     }
 
-    // 3. המרת קוד לטוקן
+    // 3. המרת קוד לטוקן - התיקון הקריטי כאן
     const oAuth2Client = createOAuthClient();
-    oAuth2Client.redirectUri = callbackUrl; 
     
-    const { tokens } = await oAuth2Client.getToken(code);
+    // במקום לנסות לשנות את המשתנה הפרטי (מה שגרם לשגיאה), 
+    // אנחנו מעבירים את ה-redirect_uri בתוך האובייקט לפונקציה
+    const { tokens } = await oAuth2Client.getToken({
+        code,
+        redirect_uri: callbackUrl
+    });
+    
     oAuth2Client.setCredentials(tokens);
 
     // 4. מציאת הבוט (לרפרנס)
@@ -123,7 +120,7 @@ export async function GET(
             where: {
                 userId_provider: {
                     userId: userId,
-                    provider: finalProvider // השתמשנו ב-any ולכן זה יעבור חלק
+                    provider: finalProvider
                 }
             },
             update: {
