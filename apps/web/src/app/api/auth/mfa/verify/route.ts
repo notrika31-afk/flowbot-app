@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
 import { cookies } from "next/headers";
 
+// התיקון הקריטי: הכרחת סביבת Node.js לטובת ספריות כמו rate-limit ו-getClientIp
+export const runtime = "nodejs";
+
 export async function POST(req: Request) {
-  // תיקון: ייבוא דינמי כדי למנוע קריסה בזמן ה-Build
+  // נחזיר את הייבוא להיות סטנדרטי, כי runtime = "nodejs" אמור לפתור את הבעיה
   const { rateLimit } = await import("@/lib/rate-limit");
   const { getClientIp } = await import("@/lib/request-ip");
   
@@ -29,7 +32,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { userId, code } = await req.json().catch(() => ({}));
+    const { userId, code } = await req.json().catch(() => ({})); // ה-await כבר קיים כאן!
 
     if (!userId || !code) {
       return NextResponse.json(
