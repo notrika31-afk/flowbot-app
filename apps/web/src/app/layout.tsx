@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Assistant } from "next/font/google"; // שיניתי ל-Assistant שמתאים יותר לעברית מ-Inter
-import MainHeader from "@/components/MainHeader"; // <--- ודא שהקובץ קיים
+import MainHeader from "@/components/FlowBotHeader"; // <--- ודא שהקובץ קיים
 import { getUserSession } from "@/lib/auth";      // <--- הפונקציה החדשה
 
 const font = Assistant({
