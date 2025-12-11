@@ -1,9 +1,10 @@
+// force update 3
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { generateSystemPrompt } from './prompts';
+import { generateSystemPrompt } from './prompts'; // השארתי כבקשתך
 import { getUserSession } from '@/lib/auth';
 import { googleCalendarService } from '@/lib/services/google-calendar';
-import { prisma } from '@/lib/prisma'; // <--- הוספתי
+import { prisma } from '@/lib/prisma'; 
 
 console.log("API Key Status:", process.env.GOOGLE_API_KEY ? "✅ Loaded" : "❌ MISSING");
 
@@ -199,10 +200,11 @@ export async function POST(req: Request) {
 
     const knowledgeSummary = buildKnowledgeHint(attachments);
 
-    // --- 1. שליפת חיבורים מה-DB + לינקים לתשלום ---
+    // --- 1. שליפת חיבורים מה-DB + לינקים לתשלום + לינק לאתר ---
     let activeIntegrations: string[] = [];
     let tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [];
     let paymentLinks: { paybox?: string } = {};
+    let siteLink: string | null = null; // <--- חדש: לינק לאתר
 
     if (userId) {
         try {
@@ -221,6 +223,13 @@ export async function POST(req: Request) {
             const paybox = connections.find(c => c.provider === 'PAYBOX');
             if (paybox && paybox.metadata) {
                 paymentLinks.paybox = (paybox.metadata as any).paymentUrl;
+            }
+
+            // --- חדש: שליפת לינק לאתר ---
+            const siteConn = connections.find(c => c.provider === 'SITE_LINK');
+            if (siteConn && siteConn.metadata) {
+                siteLink = (siteConn.metadata as any).url;
+                console.log("✅ Site Link Found:", siteLink);
             }
 
             console.log("✅ Active Integrations:", activeIntegrations);
@@ -248,7 +257,8 @@ export async function POST(req: Request) {
       existingFlow,
       isFreshScan,
       integrations: activeIntegrations,
-      paymentLinks // העברת הלינקים לפרומפט
+      paymentLinks, // העברת לינקים לתשלום
+      siteLink // <--- העברת לינק לאתר לפרומפט
     });
 
     const currentTimeMsg = `
@@ -290,8 +300,9 @@ export async function POST(req: Request) {
       messagesForAi.push(aiMessage);
 
       for (const toolCall of aiMessage.tool_calls) {
-        const fnName = toolCall.function.name;
-        const args = JSON.parse(toolCall.function.arguments);
+        // --- התיקון הקריטי כאן: הוספת cast ל-any ---
+        const fnName = (toolCall as any).function.name;
+        const args = JSON.parse((toolCall as any).function.arguments);
         let toolResult = "";
 
         console.log(`   👉 Executing Tool: ${fnName}`, args);
@@ -300,6 +311,7 @@ export async function POST(req: Request) {
           if (fnName === "calendar_check_availability" && userId) {
             const slots = await googleCalendarService.listBusySlots(userId, args.start_date, args.end_date);
             toolResult = JSON.stringify({ status: "success", busy_slots: slots });
+            console.log(`   ✅ Calendar: Found ${slots.length} busy slots`);
           } 
           else if (fnName === "calendar_create_event" && userId) {
             const event = await googleCalendarService.createEvent(userId, {
@@ -309,6 +321,7 @@ export async function POST(req: Request) {
               attendeeEmail: args.email
             });
             toolResult = JSON.stringify({ status: "success", event_link: event.link });
+            console.log(`   ✅ Calendar: Event Created!`);
           }
           else if (fnName === "trigger_automation" && userId) {
              const connection = await prisma.integrationConnection.findUnique({
