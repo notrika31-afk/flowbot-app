@@ -27,7 +27,8 @@ export async function POST(request: Request) {
     }
 
     // 3. יצירת הטוקן עם ה-ID האמיתי מה-DB
-    const token = signToken({
+    // התיקון הקריטי: הוספת await לפני signToken
+    const token = await signToken({
       userId: user.id, // זה ה-ID שיהיה ה-ownerId בבוט
       email: user.email,
       role: 'USER'
