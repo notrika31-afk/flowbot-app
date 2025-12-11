@@ -1,7 +1,15 @@
-import type { NextConfig } from "next";
+// next.config.js
 
-const nextConfig: NextConfig = {
-  /* config options here */
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // ההגדרה הקריטית: פותרת בעיות ייבוא של Prisma ו-node_modules ב-Vercel
+  output: 'standalone', 
+
+  // כאן אפשר להוסיף הגדרות נוספות אם יש צורך (כגון env, images, וכו')
+  // לדוגמה:
+  // env: {
+  //   CUSTOM_VAR: process.env.CUSTOM_VAR,
+  // },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
