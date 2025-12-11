@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma"; // תיקון 1: שימוש במופע המרכזי
 
 export async function POST(req: Request) {
   try {
@@ -14,13 +12,13 @@ export async function POST(req: Request) {
 
     const bot = await prisma.bot.create({
       data: {
-        userId,
+        ownerId: userId,      // תיקון 2: השדה בסכמה הוא ownerId
         name,
-        category,
-        flow_json,
+        // category,          // שים לב: אם השדה category לא קיים בסכמה, תמחק את השורה הזו
+        flowData: flow_json,  // תיקון 3: השדה בסכמה הוא flowData
         status: "draft",
-        connected: false,
-        active: false,
+        // connected: false,  // תיקון 4: שדות אלו כנראה לא בסכמה ולכן הוסתרו
+        // active: false,
       },
     });
 
