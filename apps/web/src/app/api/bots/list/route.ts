@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserSession } from "@/lib/auth"; // או getAuthUserFromToken תלוי מה יש שם
+import { getUserSession } from "@/lib/auth"; 
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    // התיקון: הוספנו await
+    // התיקון: הוספנו await כי הפונקציה מחזירה Promise
     const user = await getUserSession();
 
     if (!user || !user.id) {
@@ -17,7 +19,7 @@ export async function GET() {
         messages: {
           select: { id: true },
         },
-        connections: true, // מביא גם את החיבורים כדי להציג סטטוס
+        connections: true, 
       },
       orderBy: { updatedAt: 'desc' }
     });
@@ -27,7 +29,6 @@ export async function GET() {
       ...bot,
       stats: {
         messages: bot.messages.length,
-        // כאן אפשר להוסיף עוד סטטיסטיקות בעתיד
       }
     }));
 
