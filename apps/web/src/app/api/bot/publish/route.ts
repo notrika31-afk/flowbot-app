@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserSession } from "@/lib/auth"; // וודא שהנתיב הזה נכון אצלך
+import { getUserSession } from "@/lib/auth"; 
 
 export async function POST(req: Request) {
   try {
     // 1. זיהוי המשתמש
     const session = await getUserSession();
-    if (!session?.userId) {
+    
+    // התיקון: בדיקה מול .id ולא .userId
+    if (!session?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const userId = session.id; // שומרים במשתנה נוח לשימוש
 
     const body = await req.json();
     const { flow, waba, status } = body;
@@ -17,15 +21,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing WhatsApp credentials" }, { status: 400 });
     }
 
-    console.log("🚀 Publishing Bot for user:", session.userId);
+    console.log("🚀 Publishing Bot for user:", userId);
 
     // 2. שמירת/עדכון הבוט (התסריט)
-    // אנחנו משתמשים ב-upsert כדי ליצור אם לא קיים, או לעדכן אם קיים
-    // הנחה: לכל משתמש יש בוט אחד ראשי כרגע, או שאנחנו יוצרים חדש
     
-    // בדיקה אם למשתמש כבר יש בוט
+    // התיקון: שינוי מ-userId ל-ownerId (לפי הסכמה של הבוט בקבצים הקודמים)
     let bot = await prisma.bot.findFirst({
-        where: { userId: session.userId }
+        where: { ownerId: userId }
     });
 
     if (bot) {
@@ -33,7 +35,7 @@ export async function POST(req: Request) {
         bot = await prisma.bot.update({
             where: { id: bot.id },
             data: {
-                flowData: flow, // ה-JSON של התסריט
+                flowData: flow, 
                 publishedAt: new Date(),
                 status: status || 'ACTIVE'
             }
@@ -42,7 +44,7 @@ export async function POST(req: Request) {
         // יצירת בוט חדש
         bot = await prisma.bot.create({
             data: {
-                userId: session.userId,
+                ownerId: userId, // התיקון: שימוש ב-ownerId
                 name: "My Business Bot",
                 flowData: flow,
                 status: status || 'ACTIVE',
@@ -52,9 +54,10 @@ export async function POST(req: Request) {
     }
 
     // 3. שמירת חיבור הוואטסאפ (WABA)
-    // אנחנו מקשרים את המספר לבוט הזה
+    // הערה: אנו מניחים שטבלת whatsAppConnection קיימת ויש לה שדה userId.
+    // אם גם שם זה שונה, נצטרך להתאים, אבל כרגע תיקנתי את השימוש במשתנה הנכון.
     const existingConnection = await prisma.whatsAppConnection.findFirst({
-        where: { userId: session.userId, phoneNumberId: waba.phoneId }
+        where: { userId: userId, phoneNumberId: waba.phoneId }
     });
 
     if (existingConnection) {
@@ -64,13 +67,13 @@ export async function POST(req: Request) {
                 wabaId: waba.wabaId,
                 accessToken: waba.token,
                 isActive: true,
-                botId: bot.id // חיבור לבוט הספציפי
+                botId: bot.id 
             }
         });
     } else {
         await prisma.whatsAppConnection.create({
             data: {
-                userId: session.userId,
+                userId: userId,
                 phoneNumberId: waba.phoneId,
                 wabaId: waba.wabaId,
                 accessToken: waba.token,
