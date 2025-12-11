@@ -35,6 +35,7 @@ export default async function RootLayout({
         `}
       >
         {/* ה-Header מקבל את המשתמש ומחליט לבד אם להציג שם או כפתור התחברות */}
+        {/* @ts-ignore */}
         <MainHeader user={user} />
 
         <main className="flex-1 w-full">
