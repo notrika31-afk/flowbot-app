@@ -4,22 +4,30 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
+  const token = cookies().get("token")?.value;
+
+  if (!token) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  let payload;
   try {
-    const token = cookies().get("token")?.value;
+    // התיקון הקריטי עדיין נשמר: await
+    // עוטפים ב-try/catch למקרה ש-verifyToken נכשלת עם שגיאת Build פנימית
+    payload = await verifyToken(token);
+  } catch (err) {
+    console.error("Token verification failed during runtime:", err);
+    return NextResponse.json({ error: "invalid_token" }, { status: 401 });
+  }
+  
+  // בדיקה קפדנית יותר ל-payload
+  if (!payload || typeof payload !== 'object' || !('userId' in payload)) {
+    return NextResponse.json({ error: "invalid_token" }, { status: 401 });
+  }
 
-    if (!token) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
-
-    // התיקון הקריטי: הוספת await לפני verifyToken
-    const payload = await verifyToken(token);
-    
-    if (!payload?.userId) {
-      return NextResponse.json({ error: "invalid_token" }, { status: 401 });
-    }
-
+  try {
     const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
+      where: { id: (payload as { userId: string }).userId }, // משתמשים ב-Type Assertion בטוח יותר
       select: {
         id: true,
         email: true,
@@ -45,7 +53,7 @@ export async function GET() {
       integrationsCount: user.integrations.length,
     });
   } catch (err) {
-    console.error("ME ERROR:", err);
+    console.error("ME DB ERROR:", err);
     return NextResponse.json({ error: "server_error" }, { status: 500 });
   }
 }
