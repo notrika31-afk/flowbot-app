@@ -15,7 +15,9 @@ type SendBody = {
 
 export async function POST(req: Request) {
   try {
-    const user = getAuthUserFromToken();
+    // התיקון: הוספת await
+    const user = await getAuthUserFromToken();
+    
     if (!user) {
       return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
     }
@@ -29,7 +31,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // בדיקה שהבוט שייך למשתמש
+    // בדיקה שהבוט שייך למשתמש (עכשיו user.id יעבוד תקין)
     const bot = await prisma.bot.findFirst({
       where: { id: botId, ownerId: user.id },
       select: { id: true },

@@ -6,7 +6,8 @@ import { env } from "@/lib/config/env";
 
 export async function POST(req: Request) {
   try {
-    const authUser = getAuthUserFromToken();
+    // התיקון: הוספנו await
+    const authUser = await getAuthUserFromToken();
 
     if (!authUser) {
       return NextResponse.json(
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
       bot = await prisma.bot.findFirst({
         where: {
           id: botId,
-          ownerId: authUser.id,
+          ownerId: authUser.id, // עכשיו זה יעבוד כי authUser הוא אובייקט ולא Promise
         },
         select: { id: true },
       });
