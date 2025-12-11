@@ -4,7 +4,7 @@ export async function sendWhatsappMfaCode(toPhone: string, code: string) {
   // אם אין הגדרות, נרשום בלוג ונדלג (כדי לא לשבור את הבנייה)
   if (!env.WHATSAPP_API_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID) {
     console.warn("⚠️ WhatsApp API not configured, printing code to console instead:", code);
-    return true; // מחזירים כאילו הצליח כדי לא לתקוע את המשתמש
+    return true; 
   }
 
   const url = `https://graph.facebook.com/v19.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
