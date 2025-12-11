@@ -3,7 +3,7 @@
 // אנחנו משאירים את הייבוא הנדרש כדי שנוכל ליצור מופע חדש
 import { PrismaClient } from "@prisma/client";
 
-// אנחנו מסתמכים על הגדרה גלובלית בסיסית, כדי להימנע מטיפוס ה-PrismaClient הבעייתי
+// אנחנו משתמשים ב-as any כדי להימנע מבעיית הייבוא של הטיפוסים
 const globalForPrisma = global as any;
 
 export const prisma =
