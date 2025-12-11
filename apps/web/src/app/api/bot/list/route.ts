@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthUserFromToken } from "@/lib/auth";
+import { getUserSession } from "@/lib/auth"; 
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const user = getAuthUserFromToken();
-    if (!user) {
+    // התיקון הקריטי: חובה להוסיף await לפני getUserSession
+    const user = await getUserSession();
+
+    if (!user || !user.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -15,34 +19,22 @@ export async function GET() {
         messages: {
           select: { id: true },
         },
-        flows: {
-          select: { id: true },
-        },
-        whatsappConnections: {
-          select: {
-            isActive: true,
-            phoneNumberId: true,
-          },
-        },
+        connections: true, 
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { updatedAt: 'desc' }
     });
 
-    const formatted = bots.map((bot) => ({
-      id: bot.id,
-      name: bot.name,
-      description: bot.description || "",
-      createdAt: bot.createdAt,
-      messagesCount: bot.messages.length,
-      flowsCount: bot.flows.length,
-      whatsappActive:
-        bot.whatsappConnections.length > 0 &&
-        bot.whatsappConnections[0].isActive,
+    // עיבוד הנתונים
+    const formattedBots = bots.map((bot) => ({
+      ...bot,
+      stats: {
+        messages: bot.messages.length,
+      }
     }));
 
-    return NextResponse.json({ bots: formatted });
-  } catch (err) {
-    console.error("BOTS LIST ERROR:", err);
+    return NextResponse.json({ success: true, data: formattedBots });
+  } catch (error) {
+    console.error("List Bots Error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

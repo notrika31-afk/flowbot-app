@@ -1,40 +1,59 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserSession } from "@/lib/auth"; 
-
-export const dynamic = "force-dynamic";
+import { getAuthUserFromToken } from "@/lib/auth";
 
 export async function GET() {
   try {
-    // התיקון: הוספנו await כי הפונקציה מחזירה Promise
-    const user = await getUserSession();
+    const user = getAuthUserFromToken();
 
-    if (!user || !user.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) {
+      return NextResponse.json(
+        { error: "לא מחובר" },
+        { status: 401 }
+      );
     }
 
     const bots = await prisma.bot.findMany({
       where: { ownerId: user.id },
-      include: {
-        messages: {
-          select: { id: true },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        createdAt: true,
+
+        messages: { select: { id: true } },
+        flows: { select: { id: true } },
+
+        whatsappConnections: {
+          select: {
+            id: true,
+            isActive: true,
+            phoneNumberId: true,
+          },
         },
-        connections: true, 
       },
-      orderBy: { updatedAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
 
-    // הופכים את המידע למבנה שהפרונט צריך (כולל ספירת הודעות)
-    const formattedBots = bots.map((bot) => ({
-      ...bot,
-      stats: {
-        messages: bot.messages.length,
-      }
+    const formatted = bots.map((b) => ({
+      id: b.id,
+      name: b.name,
+      description: b.description,
+      createdAt: b.createdAt,
+
+      messagesCount: b.messages.length,
+      flowsCount: b.flows.length,
+
+      whatsapp: b.whatsappConnections.map((w) => ({
+        id: w.id,
+        active: w.isActive,
+        phoneNumberId: w.phoneNumberId,
+      })),
     }));
 
-    return NextResponse.json({ success: true, data: formattedBots });
-  } catch (error) {
-    console.error("List Bots Error:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ bots: formatted });
+  } catch (err) {
+    console.error("BOT LIST ERROR:", err);
+    return NextResponse.json({ error: "שגיאת שרת" }, { status: 500 });
   }
 }
