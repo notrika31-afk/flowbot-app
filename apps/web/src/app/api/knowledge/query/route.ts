@@ -14,7 +14,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const matches = await searchKnowledge({ businessId, question });
+    // התיקון: העברת הפרמטרים בנפרד (שאלה, ואז מזהה עסק)
+    const matches = await searchKnowledge(question, businessId);
 
     return NextResponse.json({ matches });
   } catch (err: any) {
