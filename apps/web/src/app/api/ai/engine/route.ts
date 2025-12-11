@@ -1,4 +1,4 @@
-// force update 3
+// force update 4
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { generateSystemPrompt } from './prompts'; // השארתי כבקשתך
@@ -217,16 +217,17 @@ export async function POST(req: Request) {
                 select: { provider: true, metadata: true }
             });
 
-            activeIntegrations = connections.map(c => c.provider);
+            // המרה ל-String כדי למנוע התנגשויות טיפוסים - התיקון כאן
+            activeIntegrations = connections.map(c => c.provider as string);
             
-            // בדיקת PayBox
-            const paybox = connections.find(c => c.provider === 'PAYBOX');
+            // בדיקת PayBox (התיקון: הוספת as string)
+            const paybox = connections.find(c => (c.provider as string) === 'PAYBOX');
             if (paybox && paybox.metadata) {
                 paymentLinks.paybox = (paybox.metadata as any).paymentUrl;
             }
 
-            // --- חדש: שליפת לינק לאתר ---
-            const siteConn = connections.find(c => c.provider === 'SITE_LINK');
+            // --- חדש: שליפת לינק לאתר (התיקון: הוספת as string) ---
+            const siteConn = connections.find(c => (c.provider as string) === 'SITE_LINK');
             if (siteConn && siteConn.metadata) {
                 siteLink = (siteConn.metadata as any).url;
                 console.log("✅ Site Link Found:", siteLink);
@@ -234,7 +235,7 @@ export async function POST(req: Request) {
 
             console.log("✅ Active Integrations:", activeIntegrations);
 
-            // הקצאת כלים
+            // הקצאת כלים (כעת משווים מול string)
             if (activeIntegrations.includes('GOOGLE_CALENDAR')) {
                 tools.push(...CALENDAR_TOOLS);
             }

@@ -1,4 +1,3 @@
-// src/lib/knowledge.ts
 import path from "path";
 import fs from "fs/promises";
 
@@ -83,4 +82,22 @@ export async function getBusinessKnowledge(
 ): Promise<BusinessKnowledge | null> {
   const store = await readStore();
   return store.items.find((x) => x.businessId === businessId) ?? null;
+}
+
+// --- הפונקציה שהייתה חסרה וגרמה לשגיאה ---
+export async function searchKnowledge(query: string, businessId: string): Promise<string> {
+  try {
+    const data = await getBusinessKnowledge(businessId);
+    if (!data) return "";
+
+    // כרגע מחזיר את ההערות אם יש, בעתיד אפשר לשדרג לחיפוש חכם
+    if (data.notes && data.notes.length > 0) {
+      return data.notes;
+    }
+
+    return "";
+  } catch (error) {
+    console.error("Search Knowledge Error:", error);
+    return "";
+  }
 }
