@@ -1,10 +1,13 @@
-// force update vercelimport { NextRequest, NextResponse } from "next/server";
+// force update vercel
+import { NextRequest, NextResponse } from "next/server";
 import { getUserSession } from "@/lib/auth";
 import { createOAuthClient } from "@/lib/google";
 import { prisma } from "@/lib/prisma";
+
 // מחקנו את השורה הבעייתית: import { IntegrationProvider } from "@prisma/client";
 
 export const dynamic = "force-dynamic"; // VERCEL_FIX_1
+
 function mapSlugToPrismaEnum(slug: string): any { // שינינו את ה-Return Type ל-any כדי למנוע שגיאות
   const normalizedSlug = slug.trim().toLowerCase().replace(/-/g, "_");
   const expectedEnumName = normalizedSlug.toUpperCase();
