@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma"; // וודא שהנתיב ל-prisma נכון
 
+// התיקון הקריטי: הגדרת סביבת הריצה ל-Node.js
+export const runtime = "nodejs";
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -21,6 +24,7 @@ export async function POST(req: Request) {
     if (file.type === "application/pdf") {
       try {
         // שימוש ב-require במקום import כדי למנוע שגיאות בנייה
+        // (זה יפעל רק עם runtime = "nodejs")
         const pdfParse = require("pdf-parse"); 
         const data = await pdfParse(buffer);
         textContent = data.text;
