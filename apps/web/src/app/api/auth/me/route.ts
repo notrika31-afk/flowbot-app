@@ -11,7 +11,9 @@ export async function GET() {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
-    const payload = verifyToken(token);
+    // התיקון הקריטי: הוספת await לפני verifyToken
+    const payload = await verifyToken(token);
+    
     if (!payload?.userId) {
       return NextResponse.json({ error: "invalid_token" }, { status: 401 });
     }
