@@ -25,8 +25,8 @@ let dbAutomations = [
 ];
 
 export async function GET() {
-  // 1. שימוש בפונקציה שלך לאימות
-  const user = getAuthUserFromToken();
+  // תיקון: הוספנו await כי הפונקציה מחזירה Promise
+  const user = await getAuthUserFromToken();
   
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -40,8 +40,8 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
-    // 1. שימוש בפונקציה שלך לאימות
-    const user = getAuthUserFromToken();
+    // תיקון: הוספנו await גם כאן
+    const user = await getAuthUserFromToken();
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -55,6 +55,7 @@ export async function PATCH(request: Request) {
       dbAutomations[index].status = status;
       dbAutomations[index].lastEdited = "עכשיו";
       
+      // עכשיו זה יעבוד כי user הוא אובייקט ולא Promise
       console.log(`[AUDIT] User ${user.id} (${user.role}) updated automation ${id}`);
       
       return NextResponse.json({ success: true, data: dbAutomations[index] });
