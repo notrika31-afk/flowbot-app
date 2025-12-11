@@ -1,3 +1,4 @@
+// fix vercel build
 import { env } from "@/lib/config/env";
 
 export async function sendWhatsappMfaCode(toPhone: string, code: string) {

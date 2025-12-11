@@ -1,14 +1,14 @@
 "use client";
-
+// fix vercel build
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Bot, LogOut } from "lucide-react";
+import { Bot } from "lucide-react";
 
 export default function MainHeader() {
   const pathname = usePathname();
   
-  // לא מציג האדר בעמודי אימות או בילדר מלא
-  if (pathname.includes("/auth") || pathname === "/") return null;
+  // הסתרת ההאדר בעמודי אימות או בדף הבית הראשי אם צריך
+  if (pathname.includes("/auth")) return null;
 
   return (
     <header className="h-16 border-b border-neutral-200 bg-white flex items-center justify-between px-6 sticky top-0 z-50">
