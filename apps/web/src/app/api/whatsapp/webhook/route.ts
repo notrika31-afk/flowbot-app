@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/config/env";
-import { sendWhatsAppText } from "@/lib/whatsapp"; // הייבוא החדש
+// וודא שהקובץ הזה קיים אצלך! אם לא, תגיד לי ואשלח לך אותו.
+import { sendWhatsAppText } from "@/lib/whatsapp"; 
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,7 @@ export async function GET(req: Request) {
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
+    // שימוש בערך ברירת מחדל אם המשתנה לא קיים, למניעת קריסה
     const expected = env.WHATSAPP_WEBHOOK_SECRET || "dev-webhook-secret";
 
     if (mode === "subscribe" && token === expected && challenge) {
@@ -20,6 +22,7 @@ export async function GET(req: Request) {
     }
     return NextResponse.json({ error: "verification_failed" }, { status: 403 });
   } catch (err) {
+    console.error("Webhook GET Error:", err);
     return NextResponse.json({ error: "server_error" }, { status: 500 });
   }
 }
@@ -28,6 +31,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const raw = await req.text();
+    if (!raw) return NextResponse.json({ status: "empty" }, { status: 200 });
+
     const payload = JSON.parse(raw);
 
     // חילוץ המידע הבסיסי
@@ -49,20 +54,20 @@ export async function POST(req: Request) {
     const connection = await prisma.whatsAppConnection.findFirst({
       where: { phoneNumberId: phoneNumberId },
       include: { 
-          bot: true // אנו צריכים את המידע על הבוט (ה-Flow שלו)
+          bot: true // אנו צריכים את המידע על הבוט
       }
     });
 
-    if (!connection || !connection.bot) {
-      console.warn("⚠️ No bot connected for this phone number:", phoneNumberId);
-      return NextResponse.json({ status: "no_bot" }, { status: 200 });
+    // בדיקה קפדנית יותר
+    if (!connection || !connection.bot || !connection.isActive) {
+      console.warn(`⚠️ No active bot found for phone: ${phoneNumberId}`);
+      return NextResponse.json({ status: "no_active_bot" }, { status: 200 });
     }
 
     // 2. שמירת הודעת הלקוח בדאטה-בייס
-    // (אופציונלי: כאן תוכל לשלוף היסטוריה אם תרצה שהבוט יזכור הקשר)
     await prisma.message.create({
       data: {
-        botId: connection.botId!,
+        botId: connection.bot.id, // שימוש ב-bot.id בטוח יותר מ-botId
         userId: connection.userId,
         fromPhone: from,
         direction: "inbound",
@@ -71,22 +76,29 @@ export async function POST(req: Request) {
     });
 
     // 3. הפעלת המוח (AI Engine) 🧠
-    // אנחנו שולחים בקשה פנימית ל-API של המנוע שבנינו
-    const engineUrl = `${env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/ai/engine`;
+    // התיקון כאן: שימוש במשתנה הנכון (BASE_URL)
+    const baseUrl = env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const engineUrl = `${baseUrl}/api/ai/engine`;
     
     console.log("🤖 Asking AI Engine...");
     
+    // שימוש ב-fetch פנימי
     const aiRes = await fetch(engineUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             message: textBody,
-            // אנו מעבירים את ה-Flow השמור של הבוט כדי שה-AI ידע איך להתנהג
+            // מעבירים את ה-Flow של הבוט
             existingFlow: connection.bot.flowData, 
-            phase: "simulate", // אומרים לבוט להתנהג כמו בוט אמיתי
-            history: [] // (לשיפור עתידי: שלוף את 5 ההודעות האחרונות מה-DB)
+            phase: "simulate", 
+            history: [] 
         })
     });
+
+    if (!aiRes.ok) {
+        console.error("AI Engine Failed:", aiRes.statusText);
+        return NextResponse.json({ status: "engine_error" }, { status: 200 });
+    }
 
     const aiData = await aiRes.json();
     const replyText = aiData.reply;
@@ -95,17 +107,18 @@ export async function POST(req: Request) {
         // 4. שליחת התשובה לוואטסאפ של הלקוח 🗣️
         console.log("✅ AI Replied:", replyText);
         
+        // כאן אנחנו משתמשים בפונקציה מהספרייה החיצונית
         await sendWhatsAppText({
             to: from,
             body: replyText,
             phoneNumberId: connection.phoneNumberId,
-            accessToken: connection.accessToken || "" // חייב להיות שמור בחיבור
+            accessToken: connection.accessToken || "" 
         });
 
         // שמירת תשובת הבוט ב-DB
         await prisma.message.create({
             data: {
-                botId: connection.botId!,
+                botId: connection.bot.id,
                 userId: connection.userId,
                 fromPhone: from,
                 direction: "outbound",
