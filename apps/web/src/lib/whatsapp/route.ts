@@ -9,12 +9,15 @@ export async function sendWhatsappMfaCode(toPhone: string, code: string) {
 
   const url = `https://graph.facebook.com/v19.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
+  // התיקון: אנחנו מאלצים את המערכת להתייחס למשתנה כאילו הוא קיים (as any)
+  const templateName = (env as any).WHATSAPP_MFA_TEMPLATE_NAME || "flowbot_mfa_code";
+
   const payload = {
     messaging_product: "whatsapp",
     to: toPhone.replace(/\D/g, ""), // ניקוי כל תווים שאינם מספר
     type: "template",
     template: {
-      name: env.WHATSAPP_MFA_TEMPLATE_NAME || "flowbot_mfa_code",
+      name: templateName, // שימוש במשתנה שתוקן
       language: { code: "he" },
       components: [
         {
