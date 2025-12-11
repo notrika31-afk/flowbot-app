@@ -1,14 +1,11 @@
-// ===============================================
-// /api/auth/mfa/verify
-// אימות קוד MFA + יצירת JWT והתחברות
-// ===============================================
+// /api/auth/mfa/verify/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
 import { cookies } from "next/headers";
 
 export async function POST(req: Request) {
-  // התיקון: ייבוא דינמי בתוך הפונקציה כדי למנוע קריסה בזמן ה-Build
+  // תיקון: ייבוא דינמי כדי למנוע קריסה בזמן ה-Build
   const { rateLimit } = await import("@/lib/rate-limit");
   const { getClientIp } = await import("@/lib/request-ip");
   
