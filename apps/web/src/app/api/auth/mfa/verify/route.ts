@@ -4,13 +4,14 @@
 // ===============================================
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-// @ts-ignore - משתמשים ב-require כדי לעקוף בעיות ייבוא ב-Build time
-const { rateLimit } = require("@/lib/rate-limit");
-const { getClientIp } = require("@/lib/request-ip");
 import { signToken } from "@/lib/auth";
 import { cookies } from "next/headers";
 
 export async function POST(req: Request) {
+  // התיקון: ייבוא דינמי בתוך הפונקציה כדי למנוע קריסה בזמן ה-Build
+  const { rateLimit } = await import("@/lib/rate-limit");
+  const { getClientIp } = await import("@/lib/request-ip");
+  
   try {
     const ip = getClientIp(req);
 
@@ -80,7 +81,6 @@ export async function POST(req: Request) {
     });
 
     // יצירת JWT
-    // התיקון כאן: הוספנו 'as any' כדי למנוע את השגיאה, אבל השארנו את הנתונים שלך
     const token = signToken({
       userId: user.id,
       session: `sess_${Date.now()}`,
