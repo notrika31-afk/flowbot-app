@@ -1,22 +1,32 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma"; // התיקון: שימוש במופע המרכזי
+import { getUserSession } from "@/lib/auth";
 
-const prisma = new PrismaClient();
-
-export async function DELETE(req: Request) {
+export async function POST(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
-
-    if (!id) {
-      return NextResponse.json({ error: "Missing bot ID" }, { status: 400 });
+    const session = await getUserSession();
+    if (!session?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await prisma.bot.delete({ where: { id } });
+    const { id } = await req.json();
+
+    if (!id) {
+        return NextResponse.json({ error: "Missing bot ID" }, { status: 400 });
+    }
+
+    // מחיקת הבוט (רק אם הוא שייך למשתמש)
+    await prisma.bot.deleteMany({
+      where: {
+        id: id,
+        ownerId: session.id
+      }
+    });
 
     return NextResponse.json({ success: true });
+
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    console.error("Delete Error:", error);
+    return NextResponse.json({ error: "Failed to delete bot" }, { status: 500 });
   }
 }
