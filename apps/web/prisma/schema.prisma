@@ -1,4 +1,3 @@
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -83,6 +82,9 @@ model Bot {
   // חיבורים
   wabaConnection WabaConnection?
   hostedNumber   HostedNumber?
+
+  // 🔗 אינטגרציות מחוברות לבוט הזה
+  integrations   IntegrationConnection[]
 
   @@index([ownerId])
 }
@@ -276,6 +278,7 @@ model HostedNumber {
 model IntegrationConnection {
   id           String              @id @default(cuid())
   userId       String
+  botId        String?             // 👈 עכשיו יש גם בוט
   provider     IntegrationProvider
   status       IntegrationStatus   @default(DISCONNECTED)
   accessToken  String?
@@ -290,8 +293,10 @@ model IntegrationConnection {
   updatedAt    DateTime            @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bot  Bot? @relation(fields: [botId], references: [id], onDelete: Cascade)
 
   @@unique([userId, provider])
+  @@unique([botId, provider], name: "botId_provider") // 👈 בשביל ה־upsert בקובץ callback
 }
 
 enum IntegrationProvider {
@@ -365,7 +370,7 @@ model Integration {
   metadata     Json?
   status       String   @default("active")
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime @default(now())
 }
 
 model MfaCode {
