@@ -3,6 +3,14 @@ import { cookies } from 'next/headers';
 import { signToken } from '@/lib/auth';
 import { prisma } from '@/lib/prisma'; // חובה לייבא את פריזמה
 
+// 👇 התיקון הקריטי ל-Vercel
+export async function GET() {
+  return NextResponse.json({
+    status: "ok",
+    message: "session endpoint available"
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -13,23 +21,20 @@ export async function POST(request: Request) {
       where: { email },
     });
 
-    // 2. אם אנחנו במצב "פיתוח" ואין משתמש - ניצור אותו אוטומטית (כדי למנוע את השגיאה)
-    // הערה: ב-Production זה לא מומלץ, אבל ל-Localhost זה מציל חיים.
+    // 2. יצירה אוטומטית במקרה שאין משתמש (רק לפיתוח)
     if (!user) {
       console.log(`User ${email} not found in DB. Creating automatically...`);
       user = await prisma.user.create({
         data: {
           email,
           name: email.split('@')[0], // שם זמני
-          // כאן אפשר להוסיף סיסמה מוצפנת אם צריך
         },
       });
     }
 
-    // 3. יצירת הטוקן עם ה-ID האמיתי מה-DB
-    // התיקון הקריטי: הוספת await לפני signToken
+    // 3. יצירת הטוקן עם ID אמיתי
     const token = await signToken({
-      userId: user.id, // זה ה-ID שיהיה ה-ownerId בבוט
+      userId: user.id,
       email: user.email,
       role: 'USER'
     });
@@ -42,7 +47,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 30, // 30 יום
+      maxAge: 60 * 60 * 24 * 30,
     });
 
     return NextResponse.json({ success: true, user });
