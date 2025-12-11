@@ -7,10 +7,13 @@ interface PromptContext {
   existingFlow?: FlowJson | null;
   isFreshScan?: boolean;
   integrations?: string[];
+  // התיקון שמונע את השגיאה: הגדרת המבנה של לינקים לתשלום
+  paymentLinks?: { paybox?: string; paypal?: string };
+  siteLink?: string | null;
 }
 
 export const generateSystemPrompt = (context: PromptContext): string => {
-  const { phase, businessInfo, knowledgeSummary, existingFlow, isFreshScan, integrations = [] } = context;
+  const { phase, businessInfo, knowledgeSummary, existingFlow, isFreshScan, integrations = [], paymentLinks = {}, siteLink } = context;
 
   const now = new Date();
   const currentDateTime = now.toLocaleString('he-IL', {
@@ -20,15 +23,17 @@ export const generateSystemPrompt = (context: PromptContext): string => {
   });
 
   const hasCalendar = integrations.includes('GOOGLE_CALENDAR');
-  const hasStripe = integrations.includes('STRIPE'); 
+  const hasStripe = integrations.includes('STRIPE');
+  const hasPayBox = integrations.includes('PAYBOX');
+  const hasPayPal = integrations.includes('PAYPAL');
 
-  // המרת ה-JSON הקיים למחרוזת כדי שה-AI יוכל לקרוא אותו
+  // המרת ה-JSON הקיים למחרוזת
   const existingFlowStr = existingFlow 
     ? JSON.stringify(existingFlow, null, 2) 
     : "NO FLOW YET.";
 
   /* ============================================================
-      0) TOOL PROTOCOLS (LOGIC DEFINITIONS)
+      0) TOOL PROTOCOLS (עם תוספת תשלומים + אתר)
   ============================================================ */
   const toolProtocols = `
 ==========================
@@ -47,6 +52,16 @@ IN SIMULATION: If the tools are NOT connected, you must SIMULATE their success.
    - ACTION: Call 'calendar_create_event'.
    - PAYLOAD: { summary: "Meeting", start_time: "ISO...", end_time: "ISO..." }.
    - IF MOCKING (No Calendar): Say "Great! I have booked your appointment."
+
+3. **PAYMENTS (NEW):**
+   - **PayBox/Bit:** If active, simply send this link in the text: ${paymentLinks.paybox || '[LINK_MISSING]'}.
+   - **Stripe/PayPal:** If active, Call 'generate_payment_link'.
+     - PAYLOAD: { amount: 50, currency: 'ILS', description: 'Service' }.
+
+4. **EXTERNAL SITE/FORM (NEW):**
+   - **CONDITION:** If site link is active (${siteLink ? "YES" : "NO"}).
+   - **TRIGGER:** User asks "Where can I see photos?", "Do you have a site?", or needs to fill a form.
+   - **ACTION:** Send this link: ${siteLink || "[SITE_LINK_MISSING]"}.
 `;
 
   /* ============================================================
@@ -197,6 +212,8 @@ CONTEXT & DATA
 ==========================
 User Context: ${businessInfo || 'None'}
 Website Data: ${knowledgeSummary || 'None'}
+**Active Integrations:** ${integrations.join(', ') || 'None'}
+**External Site Link:** ${siteLink || 'None'}
 
 ==========================
 📂 CURRENT SAVED FLOW (MEMORY)
@@ -228,6 +245,11 @@ ${existingFlowStr}
         - Iterate on phrasing with the user.
         - **DO NOT** suggest integrations here. We focus on the script first.
         - **DO NOT** generate JSON until approval.
+        
+        **SYSTEM EVENT: SYSTEM_CHECK_INTEGRATIONS**
+        - If you see "SYSTEM_CHECK_INTEGRATIONS":
+        - Do NOT restart discovery.
+        - Say: "ראיתי שחזרת! האם תרצה שנמשיך בבניית התסריט או שנעבור לסימולציה?"
         `;
         break;
 
@@ -253,14 +275,20 @@ ${existingFlowStr}
 
       case 'simulate':
         phaseInstructions = `
-        PHASE: SIMULATE (DEMO MODE)
-        ===========================
+        PHASE: SIMULATE (DEMO / MOCK MODE)
+        ===================================
         You are acting as the bot.
         
         **BEHAVIOR:**
         1. Act as if all integrations are PERFECTLY connected.
         2. If user asks for time -> "Checking... Yes, 10:00 is available." (MOCK).
         3. If user books -> "Great! Booked successfully." (MOCK).
+        4. **PAYMENTS:**
+           - If PayBox is connected -> Send the link!
+           - If Stripe is connected -> Use 'generate_payment_link'.
+           - If nothing connected -> Just say "I would send a payment link here."
+        5. **EXTERNAL SITE:**
+           - If the user asks for more info/photos -> Send the SITE LINK if available.
         
         **GOAL:**
         Show the user the "Happy Path" of the conversation. 
@@ -293,7 +321,6 @@ ${existingFlowStr}
   ============================================================ */
   
   if (phase === 'simulate') {
-      // בסימולציה: תן לו את הכלים והמידע
       return `
 ${baseIdentity}
 ${toolProtocols}
