@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthUserFromToken } from "@/lib/auth"; 
 import { prisma } from "@/lib/db";
-// התיקון: הסרת הייבוא הבעייתי של Enums
 import { 
     PROVIDERS, 
     type ProviderConfig, 
@@ -77,19 +76,23 @@ export async function GET(
             ? new Date(Date.now() + tokenResponse.expires_in * 1000)
             : null;
 
+        // התיקון כאן: שימוש ב-as any כדי לאפשר גישה ל-metadata גם אם הוא לא מוגדר ב-Type
+        const configMeta = (providerConfig as any).metadata || {};
+        const tokenMeta = (tokenResponse as any).metadata || {};
+
         await prisma.integrationConnection.upsert({
             where: {
                 userId_provider: {
                     userId,
-                    provider: providerEnum as any, // שימוש ב-any לעקיפת בדיקת טיפוסים
+                    provider: providerEnum as any,
                 },
             },
             update: {
-                status: 'CONNECTED', // שימוש בטקסט ישיר במקום Enum
+                status: 'CONNECTED',
                 accessToken: tokenResponse.access_token,
                 refreshToken: tokenResponse.refresh_token,
                 expiresAt: expiresAt,
-                metadata: { ...providerConfig.metadata, ...tokenResponse.metadata },
+                metadata: { ...configMeta, ...tokenMeta },
             },
             create: {
                 userId,
@@ -98,7 +101,7 @@ export async function GET(
                 accessToken: tokenResponse.access_token,
                 refreshToken: tokenResponse.refresh_token,
                 expiresAt: expiresAt,
-                metadata: { ...providerConfig.metadata, ...tokenResponse.metadata },
+                metadata: { ...configMeta, ...tokenMeta },
             },
         });
 
