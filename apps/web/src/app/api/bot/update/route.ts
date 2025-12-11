@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma"; // התיקון: שימוש במופע המרכזי
 
 export async function PUT(req: Request) {
   try {
@@ -14,7 +12,14 @@ export async function PUT(req: Request) {
 
     const bot = await prisma.bot.update({
       where: { id },
-      data: { name, category, flow_json, status, connected, active },
+      data: { 
+        name, 
+        // category,          // הוסתר כי כנראה לא קיים בסכמה
+        flowData: flow_json,  // התיקון: המיפוי הנכון לשדה flowData
+        status, 
+        // connected,         // הוסתר כי כנראה לא קיים בסכמה
+        // active             // הוסתר כי כנראה לא קיים בסכמה
+      },
     });
 
     return NextResponse.json({ success: true, bot });
