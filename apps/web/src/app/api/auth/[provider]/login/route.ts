@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOAuthClient, getAuthUrl } from "@/lib/google";
-import { getUserSession } from "@/lib/auth"; // וודא שהייבוא הזה קיים אצלך
+import { createOAuthClient } from "@/lib/google";
+import { getUserSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma"; 
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +16,27 @@ export async function GET(
 
   const returnUrl = "/builder/connect";
 
-  // 1. קבלת המשתמש הנוכחי לפני היציאה לגוגל
+  // 1. קבלת המשתמש מהסשן
   const user = await getUserSession();
   
   if (!user || !user.id) {
-      // אם אין משתמש, אין טעם לצאת לגוגל
       const errorUrl = new URL(returnUrl, req.url);
       errorUrl.searchParams.set("error", "unauthorized_login_attempt");
+      return NextResponse.redirect(errorUrl);
+  }
+
+  // 2. בדיקת הגנה קריטית: האם המשתמש באמת קיים ב-DB?
+  const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true }
+  });
+
+  if (!dbUser) {
+      console.error(`[Auth Login] Ghost user detected! ID ${user.id} exists in session but NOT in DB.`);
+      
+      const errorUrl = new URL(returnUrl, req.url);
+      errorUrl.searchParams.set("error", "database_mismatch");
+      errorUrl.searchParams.set("details", "Please Log Out and Sign In again");
       return NextResponse.redirect(errorUrl);
   }
 
@@ -35,16 +50,16 @@ export async function GET(
   try {
     const oAuth2Client = createOAuthClient();
     const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/${cleanProvider}/callback`;
-    oAuth2Client.redirectUri = callbackUrl;
+    
+    // מחיקת השורה הבעייתית: oAuth2Client.redirectUri = callbackUrl;
 
-    // בחירת סוג ההרשאה
     const scopeType = cleanProvider === 'google_sheets' ? 'sheets' : 'calendar';
     
-    // 2. יצירת ה-URL עם ה-userId בתוך ה-State
-    // זה הטריק: אנחנו מעבירים את ה-ID של המשתמש לגוגל, והם יחזירו לנו אותו
+    // 3. שליחה לגוגל
     const authUrl = oAuth2Client.generateAuthUrl({
         access_type: "offline",
         prompt: "consent",
+        redirect_uri: callbackUrl, // <--- הנה התיקון: מעבירים את הכתובת כאן בפנים
         scope: scopeType === 'sheets' 
             ? [
                 "https://www.googleapis.com/auth/spreadsheets",
@@ -56,7 +71,7 @@ export async function GET(
                 "https://www.googleapis.com/auth/calendar.events",
                 "https://www.googleapis.com/auth/userinfo.email"
               ],
-        state: user.id // <--- הנה התיקון: שליחת ה-ID
+        state: user.id 
     });
     
     return NextResponse.redirect(authUrl);
