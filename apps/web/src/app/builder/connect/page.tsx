@@ -403,13 +403,13 @@ export default function ConnectPage() {
                       <div className="flex items-center justify-between mb-5 border-b border-slate-100 pb-4">
                          <div>
                             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                {/* אייקונים לפי קבוצה */}
-                                {group.key === 'calendar' && <Calendar className="w-5 h-5 text-indigo-500" />}
-                                {group.key === 'data' && <FileSpreadsheet className="w-5 h-5 text-emerald-500" />}
-                                {group.key === 'integrations' && <Zap className="w-5 h-5 text-orange-500" />}
-                                {group.key === 'automation' && <Webhook className="w-5 h-5 text-purple-500" />}
-                                {group.key === 'payments' && <CreditCard className="w-5 h-5 text-blue-500" />}
-                                {group.key === 'site' && <Globe className="w-5 h-5 text-cyan-500" />}
+                                {/* אייקונים לפי קבוצה - הוספנו as string כדי לפתור את השגיאה */}
+                                {(group.key as string) === 'calendar' && <Calendar className="w-5 h-5 text-indigo-500" />}
+                                {(group.key as string) === 'data' && <FileSpreadsheet className="w-5 h-5 text-emerald-500" />}
+                                {(group.key as string) === 'integrations' && <Zap className="w-5 h-5 text-orange-500" />}
+                                {(group.key as string) === 'automation' && <Webhook className="w-5 h-5 text-purple-500" />}
+                                {(group.key as string) === 'payments' && <CreditCard className="w-5 h-5 text-blue-500" />}
+                                {(group.key as string) === 'site' && <Globe className="w-5 h-5 text-cyan-500" />}
                                 {group.title}
                             </h2>
                             <p className="text-sm text-slate-500">{group.description}</p>
