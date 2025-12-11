@@ -79,11 +79,12 @@ export async function POST(req: Request) {
     });
 
     // יצירת JWT
+    // התיקון כאן: הוספנו 'as any' כדי למנוע את השגיאה, אבל השארנו את הנתונים שלך
     const token = signToken({
       userId: user.id,
       session: `sess_${Date.now()}`,
       mfa: true,
-    });
+    } as any);
 
     cookies().set("token", token, {
       httpOnly: true,
