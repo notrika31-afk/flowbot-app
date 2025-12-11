@@ -4,8 +4,9 @@
 // ===============================================
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/rate-limit";
-import { getClientIp } from "@/lib/request-ip";
+// @ts-ignore - משתמשים ב-require כדי לעקוף בעיות ייבוא ב-Build time
+const { rateLimit } = require("@/lib/rate-limit");
+const { getClientIp } = require("@/lib/request-ip");
 import { signToken } from "@/lib/auth";
 import { cookies } from "next/headers";
 
