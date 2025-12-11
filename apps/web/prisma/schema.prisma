@@ -1,0 +1,380 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------
+// 🧑‍💼 טבלת משתמשים (בעלי העסק)
+// ---------------------------------------------------------
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String?
+  phone         String?
+  emailVerified DateTime?
+  image         String?
+
+  // נתוני מנוי (SaaS)
+  plan             UserPlan  @default(FREE)
+  stripeCustomerId String?
+  subscriptionId   String?
+  subscriptionEnd  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // קשרים
+  bots            Bot[]
+  wabaConnections WabaConnection[]
+  hostedNumbers   HostedNumber[]
+  integrations    IntegrationConnection[]
+  sessions        Session[]
+  mfaCodes        MfaCode[]
+  accounts        Account[]
+}
+
+enum UserPlan {
+  FREE
+  PRO
+  BUSINESS
+}
+
+// ---------------------------------------------------------
+// 🤖 טבלת בוטים
+// ---------------------------------------------------------
+model Bot {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  ownerId     String
+  isActive    Boolean @default(true)
+
+  // === הגדרות AI ===
+  systemPrompt String? @db.Text // ההוראה הראשית ל-AI
+  aiModel      String  @default("gpt-4-turbo")
+  temperature  Float   @default(0.7)
+
+  // === שדה סטטוס ===
+  status String @default("DRAFT")
+
+  webhookUrl String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // רכיבי הבוט
+  flows    Flow[]
+  messages Message[]
+  contacts Contact[]
+  sessions ConversationSession[]
+
+  // מאגר ידע
+  knowledgeSources KnowledgeSource[]
+
+  // חיבורים
+  wabaConnection WabaConnection?
+  hostedNumber   HostedNumber?
+
+  @@index([ownerId])
+}
+
+// ---------------------------------------------------------
+// 🧠 טבלת מקורות ידע (Knowledge Base)
+// ---------------------------------------------------------
+model KnowledgeSource {
+  id    String @id @default(cuid())
+  botId String
+  type  String // FILE, URL, TEXT
+  name  String // שם הקובץ או הכותרת
+
+  // תוכן ומיקום
+  content   String? @db.Text
+  sourceUrl String?
+  vectorId  String?
+
+  // סטטוס העיבוד
+  status   KnowledgeStatus @default(PENDING)
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@index([botId])
+}
+
+enum KnowledgeStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+// ---------------------------------------------------------
+// 🔀 טבלת Flow — תסריטים
+// ---------------------------------------------------------
+model Flow {
+  id             String  @id @default(cuid())
+  botId          String
+  name           String  @default("תסריט ראשי")
+  triggerKeyword String?
+
+  // Nodes & Edges (React Flow)
+  nodes Json
+
+  isPublished Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@index([botId])
+}
+
+// ---------------------------------------------------------
+// 👥 אנשי קשר / לידים
+// ---------------------------------------------------------
+model Contact {
+  id        String   @id @default(cuid())
+  botId     String
+  name      String?
+  phone     String
+  tags      String[]
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bot      Bot       @relation(fields: [botId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([botId, phone])
+  @@index([botId])
+}
+
+// ---------------------------------------------------------
+// 💬 לוג הודעות
+// ---------------------------------------------------------
+model Message {
+  id        String           @id @default(cuid())
+  botId     String
+  contactId String?
+  direction MessageDirection
+  type      MessageType      @default(TEXT)
+  content   String
+  status    MessageStatus    @default(SENT)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  bot     Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([botId])
+  @@index([contactId])
+}
+
+enum MessageDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  DOCUMENT
+  AUDIO
+  LOCATION
+  INTERACTIVE
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+// ---------------------------------------------------------
+// 💬 Session טכני (כולל סימולציה)
+// ---------------------------------------------------------
+model ConversationSession {
+  id          String  @id @default(cuid())
+  botId       String
+  userPhone   String
+  currentNode String?
+  variables   Json?
+
+  isSimulation Boolean @default(false)
+
+  status    SessionStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@index([botId])
+  @@index([userPhone])
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+}
+
+// ---------------------------------------------------------
+// 📲 חיבורים ואינטגרציות
+// ---------------------------------------------------------
+model WabaConnection {
+  id            String   @id @default(cuid())
+  userId        String
+  botId         String?  @unique
+  wabaId        String
+  phoneNumberId String
+  accessToken   String
+  verifyToken   String
+  phoneNumber   String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bot  Bot? @relation(fields: [botId], references: [id])
+
+  @@index([userId])
+}
+
+model HostedNumber {
+  id          String    @id @default(cuid())
+  userId      String
+  botId       String?   @unique
+  phoneNumber String
+  instanceId  String?
+  plan        String
+  isActive    Boolean   @default(false)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bot  Bot? @relation(fields: [botId], references: [id])
+
+  @@index([userId])
+}
+
+// המודל הראשי שבו אנחנו משתמשים לאינטגרציות
+model IntegrationConnection {
+  id           String              @id @default(cuid())
+  userId       String
+  provider     IntegrationProvider
+  status       IntegrationStatus   @default(DISCONNECTED)
+  accessToken  String?
+  refreshToken String?
+  
+  // ✅ הוספתי ואימתתי שזה קיים כדי למנוע את השגיאה האחרונה
+  webhookId    String?             
+  
+  expiresAt    DateTime?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+}
+
+enum IntegrationProvider {
+  GOOGLE_CALENDAR
+  GOOGLE_SHEETS // ✅ קיים ומאומת
+  OUTLOOK_CALENDAR
+  HUBSPOT
+  SALESFORCE
+  STRIPE
+  PAYPAL
+  ZAPIER
+  MAKE
+  zoom
+  site_link
+  paybox
+  bit 
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  PENDING
+  DISCONNECTED
+  ERROR
+}
+
+// ---------------------------------------------------------
+// 🔐 Auth (NextAuth)
+// ---------------------------------------------------------
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// מודל ישן/נוסף לאינטגרציות (נשמר למקרה הצורך, אך מומלץ להשתמש ב-IntegrationConnection)
+model Integration {
+  id           String   @id @default(cuid())
+  userId       String
+  provider     String   
+  accessToken  String?  @db.Text
+  refreshToken String?  @db.Text
+  apiKey       String?  @db.Text
+  metadata     Json?
+  status       String   @default("active")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, provider])
+}
+
+model MfaCode {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
