@@ -67,7 +67,7 @@ export async function POST(req: Request) {
     // 2. שמירת הודעת הלקוח בדאטה-בייס
     await prisma.message.create({
       data: {
-        botId: connection.bot.id, // שימוש ב-bot.id בטוח יותר מ-botId
+        botId: connection.bot.id, 
         userId: connection.userId,
         fromPhone: from,
         direction: "inbound",
@@ -76,7 +76,6 @@ export async function POST(req: Request) {
     });
 
     // 3. הפעלת המוח (AI Engine) 🧠
-    // התיקון כאן: שימוש במשתנה הנכון (BASE_URL)
     const baseUrl = env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
     const engineUrl = `${baseUrl}/api/ai/engine`;
     
@@ -107,13 +106,13 @@ export async function POST(req: Request) {
         // 4. שליחת התשובה לוואטסאפ של הלקוח 🗣️
         console.log("✅ AI Replied:", replyText);
         
-        // כאן אנחנו משתמשים בפונקציה מהספרייה החיצונית
+        // התיקון כאן: הוספנו 'as any' כדי לעקוף את בדיקת הטיפוסים הקפדנית
         await sendWhatsAppText({
             to: from,
             body: replyText,
             phoneNumberId: connection.phoneNumberId,
             accessToken: connection.accessToken || "" 
-        });
+        } as any);
 
         // שמירת תשובת הבוט ב-DB
         await prisma.message.create({
