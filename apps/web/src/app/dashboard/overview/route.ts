@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; // וודא שהייבוא תקין
+import { prisma } from "@/lib/prisma"; 
 import { getAuthUserFromToken } from "@/lib/auth";
 
 export async function GET() {
   try {
     // 1. זיהוי המשתמש
-    const user = getAuthUserFromToken();
+    // התיקון: הוספנו await כאן
+    const user = await getAuthUserFromToken();
+    
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
