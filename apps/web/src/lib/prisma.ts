@@ -1,20 +1,11 @@
-// apps/web/src/lib/prisma.ts
+import { PrismaClient } from '@prisma/client';
 
-// 1. שימוש ב-require (שיטת Node.js) במקום import כדי לעקוף את בעיית ה-Typescript.
-// @ts-ignore - נאפשר ל-require לעבוד למרות שזה לא דרך TS מודרנית
-const PrismaClient = require("@prisma/client").PrismaClient;
-
-// 2. אנחנו משתמשים ב-as any כדי להימנע מבעיית הייבוא של הטיפוסים
-const globalForPrisma = global as any;
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 export const prisma =
   globalForPrisma.prisma ||
   new PrismaClient({
-    // במצב פיתוח, נחמד לראות את השאילתות רצות
-    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+    datasourceUrl: process.env.DATABASE_URL,  // <<< זה מה שמחליף את url של schema.prisma
   });
 
-// שמירה על מופע אחד גלובלי (Singleton)
-if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.prisma = prisma;
-}
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
