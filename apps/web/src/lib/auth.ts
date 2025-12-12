@@ -50,7 +50,19 @@ export function verifyToken(token: string): JwtPayload | null {
 // פונקציה זו מיועדת לשימוש ב-Layout וב-Server Components
 export async function getUserSession() {
   try {
-    const cookieStore = cookies();
+    // בדיקה אם אנחנו בבנייה סטטית - אם כן, החזר null
+    if (process.env.BUILDING === 'true' || !process.env.NODE_ENV) {
+      return null;
+    }
+
+    let cookieStore;
+    try {
+      cookieStore = cookies();
+    } catch (e) {
+      // אם אין קוקי context (למשל בזמן בנייה), החזר null
+      return null;
+    }
+
     const token = cookieStore.get("token")?.value;
 
     // אופטימיזציה: אם אין טוקן, צא מיד
@@ -70,7 +82,7 @@ export async function getUserSession() {
     };
   } catch (error) {
     // בכל מקרה של שגיאה בלתי צפויה - החזר שאין משתמש
-    console.error("Session Error:", error);
+    // זה יכול להשתמש אם אנו בבניית סטטית או אם אין קוקי בקשה
     return null;
   }
 }

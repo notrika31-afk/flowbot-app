@@ -1,14 +1,26 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getUserSession } from '@/lib/auth';
 
+// 强制动态路由 - 禁止任何静态生成或缓存
 export const dynamic = 'force-dynamic';
+export const revalidate = 0; // 无缓存
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // 1. זיהוי המשתמש
-    const user = await getUserSession();
+    // 1. זיהוי המשתמש - עם הגנה מפני שגיאות בניית סטטית
+    let user = null;
+    try {
+      user = await getUserSession();
+    } catch (authError) {
+      // אם יש שגיאה בשליפת הסשן (למשל בזמן בנייה), נחזור null
+      // זה לא יעצור את הבנייה
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
 
     if (!user || !user.id) {
       return NextResponse.json(
