@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma"; // תיקון 1: שימוש במופע המרכזי
 
+// ==============================================================================
+// תיקון קריטי לשגיאת Build:
+// הגדרות אלו מונעות מ-Next.js לנסות להריץ את הקוד בזמן הבנייה
+// ומחייבות שימוש בסביבת Node.js יציבה עבור Prisma.
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+// ==============================================================================
+
 export async function POST(req: Request) {
   try {
     const data = await req.json();
