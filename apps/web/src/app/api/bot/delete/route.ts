@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma"; // התיקון: שימוש במופע המרכזי
 import { getUserSession } from "@/lib/auth";
 
+// ==============================================================================
+// תיקון קריטי לשגיאת Build:
+// הגדרות אלו מונעות מ-Next.js לנסות להריץ את הקוד בזמן הבנייה
+// ומחייבות שימוש בסביבת Node.js יציבה עבור Prisma.
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+// ==============================================================================
+
 export async function POST(req: Request) {
   try {
     const session = await getUserSession();
