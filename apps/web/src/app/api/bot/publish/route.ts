@@ -2,12 +2,20 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth"; 
 
+// ==============================================================================
+// תיקון קריטי לשגיאת Build:
+// הגדרות אלו מונעות מ-Next.js לנסות להריץ את הקוד בזמן הבנייה
+// ומחייבות שימוש בסביבת Node.js יציבה עבור Prisma.
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+// ==============================================================================
+
 export async function POST(req: Request) {
   try {
     // 1. זיהוי המשתמש
     const session = await getUserSession();
     
-    // התיקון: בדיקה מול .id ולא .userId
+    // בדיקה מול .id ולא .userId (כפי שביקשת)
     if (!session?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -25,7 +33,7 @@ export async function POST(req: Request) {
 
     // 2. שמירת/עדכון הבוט (התסריט)
     
-    // התיקון: שינוי מ-userId ל-ownerId (לפי הסכמה של הבוט בקבצים הקודמים)
+    // שימוש ב-ownerId לפי הסכמה
     let bot = await prisma.bot.findFirst({
         where: { ownerId: userId }
     });
@@ -44,7 +52,7 @@ export async function POST(req: Request) {
         // יצירת בוט חדש
         bot = await prisma.bot.create({
             data: {
-                ownerId: userId, // התיקון: שימוש ב-ownerId
+                ownerId: userId,
                 name: "My Business Bot",
                 flowData: flow,
                 status: status || 'ACTIVE',
@@ -54,8 +62,6 @@ export async function POST(req: Request) {
     }
 
     // 3. שמירת חיבור הוואטסאפ (WABA)
-    // הערה: אנו מניחים שטבלת whatsAppConnection קיימת ויש לה שדה userId.
-    // אם גם שם זה שונה, נצטרך להתאים, אבל כרגע תיקנתי את השימוש במשתנה הנכון.
     const existingConnection = await prisma.whatsAppConnection.findFirst({
         where: { userId: userId, phoneNumberId: waba.phoneId }
     });
