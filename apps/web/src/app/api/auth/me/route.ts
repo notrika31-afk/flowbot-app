@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { verifyToken } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
@@ -6,8 +6,8 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
-  const token = cookies().get("token")?.value;
+export async function GET(request: NextRequest) {
+  const token = request.cookies.get("token")?.value;
 
   if (!token) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
