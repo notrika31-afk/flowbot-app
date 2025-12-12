@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma"; 
 import { getAuthUserFromToken } from "@/lib/auth";
 
+// ==============================================================================
+// התיקון: הגדרות אלו מונעות מ-Next.js לנסות להריץ את הקוד בזמן הבנייה
+// זה פותר את השגיאה Failed to collect page data
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+// ==============================================================================
+
 export async function GET() {
   try {
     // 1. זיהוי המשתמש
