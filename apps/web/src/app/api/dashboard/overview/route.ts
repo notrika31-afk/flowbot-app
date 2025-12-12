@@ -1,12 +1,10 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getUserSession } from '@/lib/auth';
-export const dynamic = "force-dynamic";
 
-// 强制动态路由 - 禁止任何静态生成或缓存
 export const dynamic = 'force-dynamic';
-export const revalidate = 0; // 无缓存
-export const runtime = "nodejs";
+export const revalidate = 0;
+export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
