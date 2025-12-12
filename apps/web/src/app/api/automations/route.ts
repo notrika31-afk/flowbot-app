@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 // הייבוא מהקובץ שלך
 import { getAuthUserFromToken } from "@/lib/auth"; 
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 /* Mock Database */
 let dbAutomations = [
   {

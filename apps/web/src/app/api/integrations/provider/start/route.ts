@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getAuthUserFromToken } from "@/lib/auth"; 
 import { PROVIDERS, type ProviderConfig, type ProviderSlug } from "@/lib/integrations/providers";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
 function getCallbackUrl(providerSlug: ProviderSlug): string {

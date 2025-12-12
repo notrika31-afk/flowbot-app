@@ -5,6 +5,7 @@ import * as cheerio from 'cheerio';
 
 // --- שים לב: מחקנו את ה-import של pdf-parse מכאן ---
 
+export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 

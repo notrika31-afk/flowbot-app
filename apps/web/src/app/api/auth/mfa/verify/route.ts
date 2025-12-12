@@ -5,6 +5,7 @@ import { signToken } from "@/lib/auth";
 import { cookies } from "next/headers";
 
 // התיקון הקריטי: הכרחת סביבת Node.js לטובת ספריות כמו rate-limit ו-getClientIp
+export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {

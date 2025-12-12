@@ -4,6 +4,7 @@ import { googleCalendarService } from "@/lib/services/google-calendar";
 
 // מבטיח שהקובץ לא יישמר ב-Cache
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 // חייב להיקרא בדיוק GET (באותיות גדולות)
 export async function GET(req: NextRequest) {

@@ -3,6 +3,9 @@ import { verifyToken } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function GET() {
   const token = cookies().get("token")?.value;
 

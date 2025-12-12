@@ -6,8 +6,8 @@ const { rateLimit } = require("@/lib/rate-limit");
 const { getClientIp } = require("@/lib/request-ip");
 import { sendWhatsappMfaCode } from "@/lib/whatsapp/send";
 
-// הערה: Next.js כופה את השימוש ב-Node.js Runtime בגלל שימוש בקבצי lib ו-IP.
-// אם ה-Build עדיין נכשל, ייתכן שצריך להוסיף export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {

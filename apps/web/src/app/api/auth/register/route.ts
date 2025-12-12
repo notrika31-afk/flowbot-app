@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { signToken } from '@/lib/auth';
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 // --- Login Handler (POST) ---
 export async function POST(request: Request) {
   try {

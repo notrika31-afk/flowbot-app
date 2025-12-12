@@ -4,6 +4,9 @@ import { signToken } from '@/lib/auth';
 // התיקון: אנחנו לא יכולים לשנות את הדרך שבה prisma מיובאת בנתיב זה
 import { prisma } from '@/lib/prisma'; 
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();

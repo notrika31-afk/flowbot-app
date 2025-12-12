@@ -4,6 +4,7 @@ import { env } from "@/lib/config/env";
 // וודא שהקובץ הזה קיים אצלך! אם לא, תגיד לי ואשלח לך אותו.
 import { sendWhatsAppText } from "@/lib/whatsapp"; 
 
+export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 // --- שלב 1: אימות (GET) ---

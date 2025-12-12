@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 // ✅ שלב אימות מול Meta (GET)
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);

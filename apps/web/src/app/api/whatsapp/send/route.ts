@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUserFromToken } from "@/lib/auth";
 import { env } from "@/lib/config/env";
 
+export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 // נתמך כרגע: הודעת טקסט

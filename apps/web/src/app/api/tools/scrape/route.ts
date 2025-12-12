@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { scrapeUrlDeep } from '@/lib/scraper';
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const maxDuration = 60; // מאפשר לסריקה לרוץ עד 60 שניות (Vercel/Next)
 
 export async function POST(req: Request) {

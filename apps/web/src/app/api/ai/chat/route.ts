@@ -5,6 +5,7 @@ import { env } from "@/lib/config/env";
 import { rateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
 
+export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /* ========= Configuration ========= */

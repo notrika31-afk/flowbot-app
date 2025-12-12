@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 // התיקון: מייבאים את המופע הקיים במקום ליצור חדש
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function GET(
   req: Request,
   { params }: { params: { id: string } }

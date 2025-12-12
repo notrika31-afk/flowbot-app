@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 import { type ProviderSlug, PROVIDERS } from "@/lib/integrations/providers"; 
 import { encrypt } from "@/lib/crypto";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 // --- הגדרה זמנית לפיתוח ---
 const DEV_USER_ID = "user_default_dev_123"; 
 

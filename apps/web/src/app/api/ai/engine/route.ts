@@ -6,6 +6,9 @@ import { getUserSession } from '@/lib/auth';
 import { googleCalendarService } from '@/lib/services/google-calendar';
 import { prisma } from '@/lib/prisma'; 
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 console.log("API Key Status:", process.env.GOOGLE_API_KEY ? "✅ Loaded" : "❌ MISSING");
 
 const openai = new OpenAI({
