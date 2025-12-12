@@ -9,6 +9,14 @@ import {
     type OAuthTokenResponse 
 } from "@/lib/integrations/providers"; 
 
+// ==============================================================================
+// תיקון קריטי לשגיאת Build:
+// דף Callback חייב להיות דינמי כי הוא תלוי ב-URL Params (code) ובעוגיות.
+// ההגדרות האלו מונעות מ-Next.js לנסות להריץ אותו בזמן הבנייה.
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+// ==============================================================================
+
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 const REDIRECT_AFTER_AUTH = "/builder/connect";
 
@@ -76,7 +84,7 @@ export async function GET(
             ? new Date(Date.now() + tokenResponse.expires_in * 1000)
             : null;
 
-        // התיקון כאן: שימוש ב-as any כדי לאפשר גישה ל-metadata גם אם הוא לא מוגדר ב-Type
+        // שימוש ב-as any כדי לאפשר גישה ל-metadata גם אם הוא לא מוגדר ב-Type
         const configMeta = (providerConfig as any).metadata || {};
         const tokenMeta = (tokenResponse as any).metadata || {};
 
