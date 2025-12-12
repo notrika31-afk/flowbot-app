@@ -4,6 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUserFromToken } from "@/lib/auth";
 import { env } from "@/lib/config/env";
 
+// ==============================================================================
+// תיקון קריטי לשגיאת Build:
+// הגדרות אלו מונעות מ-Next.js לנסות להריץ את הקוד בזמן הבנייה
+// ומחייבות שימוש בסביבת Node.js יציבה עבור Prisma ואימות משתמשים.
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+// ==============================================================================
+
 export async function POST(req: Request) {
   try {
     // התיקון: הוספנו await
