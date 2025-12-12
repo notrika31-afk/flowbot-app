@@ -4,10 +4,6 @@ import OpenAI from "openai";
 
 export const runtime = "edge";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
-
 // ננהל זיכרון קצר ב־RAM לפי sessionId (לדמו מקומי)
 const memory: Record<
   string,
@@ -36,6 +32,10 @@ function nextMissingKey(answers: Record<string, any>, askedKeys: string[]) {
 
 export async function POST(req: Request) {
   try {
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY!,
+    });
+
     const body = await req.json();
     const { sessionId = "default", message } = body || {};
 

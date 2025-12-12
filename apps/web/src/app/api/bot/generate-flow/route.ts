@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
 export const runtime = "edge";
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 type Answers = {
   category?: string;
@@ -15,6 +14,8 @@ type Answers = {
 
 export async function POST(req: Request) {
   try {
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
     const body = await req.json().catch(() => ({}));
     const { message, answers, goal } = body as {
       message?: string;

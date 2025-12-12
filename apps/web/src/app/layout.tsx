@@ -4,6 +4,9 @@ import { Assistant } from "next/font/google"; // שיניתי ל-Assistant שמ�
 import MainHeader from "@/components/FlowBotHeader"; // <--- ודא שהקובץ קיים
 import { getUserSession } from "@/lib/auth";      // <--- הפונקציה החדשה
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const font = Assistant({
   subsets: ["hebrew", "latin"],
   weight: ["400", "500", "600", "700", "800"],

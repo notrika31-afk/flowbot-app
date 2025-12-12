@@ -3,12 +3,12 @@ import OpenAI from "openai";
 
 export const runtime = "edge";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
-
 export async function POST(req: Request) {
   try {
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY!,
+    });
+
     const { history = [] } = await req.json();
 
     if (!Array.isArray(history)) {

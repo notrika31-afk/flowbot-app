@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
 export const runtime = "edge";
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 type FlowButton = { label: string; next?: string };
 type FlowStep = {
@@ -17,6 +16,8 @@ type Flow = { goal: string; channel?: "whatsapp"; steps: FlowStep[] };
 
 export async function POST(req: Request) {
   try {
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
     const { business } = await req.json();
 
     if (!business || typeof business !== "string") {

@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
 export const runtime = "edge";
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 export async function POST(req: Request) {
   try {
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
     const { flow, request } = await req.json();
     if (!flow?.steps?.length || !request) {
       return NextResponse.json({ error: "missing flow/request" }, { status: 400 });

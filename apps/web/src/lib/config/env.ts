@@ -23,30 +23,38 @@ const OPTIONAL = [
 ];
 
 // -------------------------------
-// בדיקת משתני סביבה
+// בדיקת משתני סביבה (Runtime Only, Not Build Time)
 // -------------------------------
-function checkEnv() {
-  const missing = REQUIRED.filter((key) => !process.env[key]);
+// ⚠️ IMPORTANT: Do NOT validate env vars at module load time (during build).
+// This check should only run at RUNTIME in API routes.
+// For build-time validation, use validateEnvAtRuntime() in API handlers instead.
 
-  if (missing.length > 0) {
-    console.warn("⚠️ Missing required env variables:", missing);
+function validateEnvAtRuntime() {
+  // Only check and throw errors at runtime, not during Next.js build
+  if (typeof window === "undefined") {
+    // Server-side only
+    const missing = REQUIRED.filter((key) => !process.env[key]);
 
-    // DEV → רק אזהרה
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        "⚠️ Development mode: ממשיכים למרות שחסר משתנה. ודא ש-.env.local מוגדר."
+    if (missing.length > 0) {
+      console.warn("⚠️ Missing required env variables:", missing);
+
+      // DEV → רק אזהרה
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(
+          "⚠️ Development mode: ממשיכים למרות שחסר משתנה. ודא ש-.env.local מוגדר."
+        );
+        return;
+      }
+
+      // PROD → מפיל את השרת (only at runtime, not build)
+      throw new Error(
+        `❌ Missing required env variables: ${missing.join(", ")}`
       );
-      return;
     }
-
-    // PROD → מפיל את השרת
-    throw new Error(
-      `❌ Missing required env variables: ${missing.join(", ")}`
-    );
   }
 }
 
-checkEnv();
+// Don't call checkEnv() at module load — defer to runtime!
 
 // -------------------------------
 // יצוא – שימוש בכל המערכת
@@ -68,3 +76,6 @@ export const env = {
   WHATSAPP_WEBHOOK_SECRET: process.env.WHATSAPP_WEBHOOK_SECRET || null,
   WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID || null, // 👈 חדש
 };
+
+// Export the runtime validation function for use in API routes
+export { validateEnvAtRuntime };
