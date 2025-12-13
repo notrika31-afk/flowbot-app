@@ -188,7 +188,7 @@ export async function POST(req: Request) {
       pricing: /(מחיר|תשלום|מנוי)/i.test(userMessage),
     };
 
-    const actions = [];
+    const actions: any[] = [];
     if (intents.simulate) actions.push({ type: "simulate", label: "הפעל סימולציה" });
     if (intents.connect) actions.push({ type: "connect", label: "חבר ל-WhatsApp" });
     if (intents.pricing) actions.push({ type: "pricing", label: "צפה בחבילות" });
