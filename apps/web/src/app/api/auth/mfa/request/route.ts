@@ -1,9 +1,6 @@
 // /api/auth/mfa/request/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-// @ts-ignore - משתמשים ב-require כדי לעקוף בעיות ייבוא ב-Build time
-const { rateLimit } = require("@/lib/rate-limit");
-const { getClientIp } = require("@/lib/request-ip");
 import { sendWhatsappMfaCode } from "@/lib/whatsapp/send";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +8,12 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
+    // Move requires inside handler to avoid build-time execution
+    // @ts-ignore
+    const { rateLimit } = require("@/lib/rate-limit");
+    // @ts-ignore
+    const { getClientIp } = require("@/lib/request-ip");
+    
     const ip = getClientIp(req);
 
     const limit = rateLimit({
