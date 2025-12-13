@@ -8,7 +8,15 @@
     ],
     "allowJs": true,
     "skipLibCheck": true,
+    
+    // --- הגדרות מקלות (הכי חשוב) ---
     "strict": false,
+    "strictNullChecks": false, 
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    // --------------------------------
+    
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "esModuleInterop": true,
@@ -18,7 +26,6 @@
     "isolatedModules": true,
     "incremental": true,
     "jsx": "preserve",
-    // ✅ ה־ALIAS החשוב!
     "baseUrl": ".",
     "paths": {
       "@/*": [
