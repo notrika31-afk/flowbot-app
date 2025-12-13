@@ -1,19 +1,22 @@
 import React from "react";
+import Link from "next/link";
 
 export default function ErrorPage() {
   return (
     <div style={{
+      height: "100vh",
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
-      minHeight: "100vh",
-      textAlign: "center",
       fontFamily: "sans-serif",
-      padding: "20px"
+      textAlign: "center"
     }}>
-      <h1 style={{ fontSize: "2rem", marginBottom: "1rem" }}>Error</h1>
-      <p>Something went wrong or the page was not found.</p>
+      <h1>Error</h1>
+      <p>Something went wrong.</p>
+      <Link href="/" style={{ marginTop: "20px", color: "blue" }}>
+        Go back home
+      </Link>
     </div>
   );
 }
