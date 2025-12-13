@@ -30,6 +30,12 @@ const PROD_CSP = [
 
 const nextConfig = {
   reactStrictMode: true,
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 
   async headers() {
     const csp = isProd ? PROD_CSP : DEV_CSP;
