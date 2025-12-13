@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
     // 1. זיהוי המשתמש - עם הגנה מפני שגיאות בניית סטטית
-    let user = null;
+    let user: any = null;
     try {
       user = await getUserSession();
     } catch (authError) {

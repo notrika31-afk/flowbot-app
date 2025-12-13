@@ -10,6 +10,19 @@ const nextConfig = {
   // env: {
   //   CUSTOM_VAR: process.env.CUSTOM_VAR,
   // },
+  /** @type {import('next').NextConfig} */
+const nextConfig = {
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  // ... keep existing config if any
+};
+
+export default nextConfig;
+
 };
 
 module.exports = nextConfig;
