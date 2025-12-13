@@ -33,7 +33,7 @@ function nextMissingKey(answers: Record<string, any>, askedKeys: string[]) {
 export async function POST(req: Request) {
   try {
     const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY!,
+      apiKey: process.env.GOOGLE_API_KEY!,
     });
 
     const body = await req.json();

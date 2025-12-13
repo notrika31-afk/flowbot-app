@@ -9,6 +9,16 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+type PineconeVector = {
+  id: string;
+  values: number[];
+  metadata: {
+    text: string;
+    source: string;
+    botId: string;
+  };
+};
+
 /* ========= Config & Helpers ========= */
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
@@ -86,8 +96,8 @@ export async function POST(req: NextRequest) {
     if (notes) contents.push({ text: notes, source: 'notes', type: 'text' });
     
     // Files Processing
-    if (process.env.OPENAI_API_KEY) {
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    if (process.env.GOOGLE_API_KEY) {
+        const openai = new OpenAI({ apiKey: process.env.GOOGLE_API_KEY });
         
         for (const f of files) {
             if (!(f instanceof File) || f.size === 0 || f.size > 5 * 1024 * 1024) continue;
@@ -128,13 +138,13 @@ export async function POST(req: NextRequest) {
 
     // Pinecone Upload
     let vectorStatus = "skipped";
-    if (process.env.PINECONE_API_KEY && process.env.OPENAI_API_KEY) {
+    if (process.env.PINECONE_API_KEY && process.env.GOOGLE_API_KEY) {
         try {
-            const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+            const openai = new OpenAI({ apiKey: process.env.GOOGLE_API_KEY });
             const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
             const index = pc.index(process.env.PINECONE_INDEX || "flowbot-index");
 
-            const vectors = [];
+            const vectors: PineconeVector[] = [];
             for (const item of contents) {
                 const chunks = splitTextIntoChunks(cleanText(item.text));
                 for (let i = 0; i < chunks.length; i++) {

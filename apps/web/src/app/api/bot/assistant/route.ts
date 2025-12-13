@@ -6,7 +6,7 @@ export const runtime = "edge";
 export async function POST(req: Request) {
   try {
     const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY!,
+      apiKey: process.env.GOOGLE_API_KEY!,
     });
 
     const { history = [] } = await req.json();

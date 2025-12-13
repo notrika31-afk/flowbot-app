@@ -16,7 +16,7 @@ type Flow = { goal: string; channel?: "whatsapp"; steps: FlowStep[] };
 
 export async function POST(req: Request) {
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+    const client = new OpenAI({ apiKey: process.env.GOOGLE_API_KEY! });
 
     const { business } = await req.json();
 
