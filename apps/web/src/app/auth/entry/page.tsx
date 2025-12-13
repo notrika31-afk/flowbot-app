@@ -8,7 +8,7 @@ import { ArrowLeft, Sparkles, LockKeyhole, ArrowRight } from 'lucide-react';
 export default function EntryGatePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/build';
+const callbackUrl = searchParams?.get('callbackUrl') || '/build';
   
   const [mode, setMode] = useState<'signup' | 'login'>('signup');
   const [isLoading, setIsLoading] = useState(false);
