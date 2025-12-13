@@ -9,11 +9,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  // נחזיר את הייבוא להיות סטנדרטי, כי runtime = "nodejs" אמור לפתור את הבעיה
-  const { rateLimit } = await import("@/lib/rate-limit");
-  const { getClientIp } = await import("@/lib/request-ip");
-  
   try {
+    // Move imports inside handler to avoid build-time execution
+    // @ts-ignore
+    const { rateLimit } = require("@/lib/rate-limit");
+    // @ts-ignore
+    const { getClientIp } = require("@/lib/request-ip");
+    
     const ip = getClientIp(req);
 
     // הגבלת ניסיונות הקלדת קוד
