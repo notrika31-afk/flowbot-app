@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { signToken } from '@/lib/auth';
-import { prisma } from '@/lib/prisma'; // ייבוא החיבור האמיתי לדאטה בייס
+import { prisma } from '@/lib/prisma';
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  console.log("--- Starting Registration Process ---");
+
   try {
     const body = await request.json();
-    const { email, password, mode } = body; // mode = 'login' או 'register'
+    const { email, password, name } = body;
 
+    // 1. ולידציה
     if (!email || !password) {
       return NextResponse.json(
         { success: false, message: 'חובה להזין אימייל וסיסמה' },
@@ -18,55 +20,39 @@ export async function POST(request: Request) {
       );
     }
 
-    let user;
-
-    // --- תרחיש 1: הרשמה (Register) ---
-    if (mode === 'register' || mode === 'signup') {
-      // בדיקה אם המשתמש כבר קיים
-      const existingUser = await prisma.user.findUnique({
-        where: { email: email },
-      });
-
-      if (existingUser) {
-        return NextResponse.json(
-          { success: false, message: 'האימייל הזה כבר קיים במערכת' },
-          { status: 409 }
-        );
-      }
-
-      // יצירת משתמש חדש ב-Neon!
-      user = await prisma.user.create({
-        data: {
-          email: email,
-          password: password, // הערה: מומלץ להצפין סיסמה עם bcrypt בעתיד
-          name: email.split('@')[0], // שם זמני
-          role: 'USER',
-        },
-      });
-    } 
-    
-    // --- תרחיש 2: התחברות (Login) ---
-    else {
-      // חיפוש המשתמש ב-Neon
-      user = await prisma.user.findUnique({
-        where: { email: email },
-      });
-
-      if (!user || user.password !== password) {
-        return NextResponse.json(
-          { success: false, message: 'אימייל או סיסמה שגויים' },
-          { status: 401 }
-        );
-      }
-    }
-
-    // --- הצלחה: יצירת טוקן ושמירת עוגייה ---
-    const token = signToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role || 'USER'
+    // 2. בדיקת כפילות
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email },
     });
 
+    if (existingUser) {
+      return NextResponse.json(
+        { success: false, message: 'האימייל הזה כבר קיים במערכת' },
+        { status: 409 }
+      );
+    }
+
+    // 3. יצירת משתמש (ללא role ב-DB)
+    console.log("Creating user in DB...");
+    const newUser = await prisma.user.create({
+      data: {
+        email,
+        password, // הערה: מומלץ להצפין בעתיד
+        name: name || email.split('@')[0],
+        // role: 'USER',  <-- הוסר כי השדה לא קיים ב-Schema שלך
+      },
+    });
+    console.log("User created:", newUser.id);
+
+    // 4. יצירת טוקן
+    // אנחנו מגדירים כאן role ידנית לטוקן כי הוא לא קיים ב-DB
+    const token = signToken({
+      userId: newUser.id,
+      email: newUser.email,
+      role: 'USER' 
+    });
+
+    // 5. קוקי
     cookies().set({
       name: 'token',
       value: token,
@@ -74,26 +60,16 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 30, // 30 יום
+      maxAge: 60 * 60 * 24 * 30,
     });
 
-    return NextResponse.json({ success: true, user });
+    return NextResponse.json({ success: true, user: newUser }, { status: 201 });
 
   } catch (error: any) {
-    console.error('Database Error:', error);
+    console.error("REGISTRATION FATAL ERROR:", error);
     return NextResponse.json(
-      { success: false, message: 'שגיאת חיבור למסד הנתונים: ' + error.message },
+      { success: false, message: 'שגיאת שרת: ' + error.message },
       { status: 500 }
     );
-  }
-}
-
-// --- Logout ---
-export async function DELETE() {
-  try {
-    cookies().delete('token');
-    return NextResponse.json({ success: true, message: 'התנתקת בהצלחה' });
-  } catch (error) {
-    return NextResponse.json({ success: false }, { status: 500 });
   }
 }

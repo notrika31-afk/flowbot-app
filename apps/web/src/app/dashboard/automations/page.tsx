@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 /* ===== Types ===== */
 type AutomationStatus = "active" | "paused" | "draft";
@@ -10,7 +11,7 @@ type AutomationStatus = "active" | "paused" | "draft";
 type Automation = {
   id: string;
   name: string;
-  trigger: string; // למשל: "מילת מפתח", "AI Intent", "טופס ליד"
+  trigger: string;
   triggerIcon: string;
   stats: {
     runs: number;
@@ -49,15 +50,6 @@ const initialAutomations: Automation[] = [
     status: "paused",
     lastEdited: "לפני 3 ימים",
   },
-  {
-    id: "4",
-    name: "מענה מחוץ לשעות פעילות",
-    trigger: "זמן: 18:00 - 08:00",
-    triggerIcon: "🌙",
-    stats: { runs: 0, successRate: "0%" },
-    status: "draft",
-    lastEdited: "לפני שבוע",
-  },
 ];
 
 /* ===== Animations ===== */
@@ -79,7 +71,6 @@ export default function AutomationsPage() {
   const [automations, setAutomations] = useState(initialAutomations);
   const [filter, setFilter] = useState<"all" | "active" | "paused">("all");
 
-  // Toggle Status Logic
   const toggleStatus = (id: string) => {
     setAutomations((prev) =>
       prev.map((auto) => {
@@ -92,37 +83,42 @@ export default function AutomationsPage() {
     );
   };
 
-  // Filter Logic
   const filteredList = automations.filter((a) =>
     filter === "all" ? true : a.status === filter
   );
 
   return (
-    <div className="min-h-full w-full p-6 sm:p-10 bg-[#fafafa] overflow-y-auto" dir="rtl">
+    // PADDING למובייל
+    <div className="min-h-full w-full p-4 md:p-10 bg-[#fafafa] overflow-y-auto" dir="rtl">
       <div className="max-w-6xl mx-auto">
         
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-          <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
-              אוטומציות ⚡
-            </h1>
-            <p className="text-slate-500 text-lg">
+        {/* Header Section - פלקס טור במובייל */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6 mb-6 md:mb-10 border-b border-slate-200 pb-6">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+                 <Link href="/dashboard" className="p-2 rounded-full hover:bg-slate-200 transition -mr-2">
+                    <ArrowRight size={24} className="text-slate-500" />
+                 </Link>
+                <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">
+                אוטומציות ⚡
+                </h1>
+            </div>
+            <p className="text-slate-500 text-sm md:text-lg md:mr-12">
               נהל את התסריטים והתגובות האוטומטיות של הבוט שלך.
             </p>
           </div>
 
           <Link
             href="/builder"
-            className="group flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+            className="group flex items-center justify-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all w-full md:w-auto"
           >
             <span className="text-xl">+</span>
             צור אוטומציה חדשה
           </Link>
         </div>
 
-        {/* Filters Bar */}
-        <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+        {/* Filters Bar - גלילה אופקית נוחה */}
+        <div className="flex items-center gap-2 mb-6 md:mb-8 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
           <FilterChip label="הכל" active={filter === "all"} onClick={() => setFilter("all")} />
           <FilterChip label="פעילים בלבד" active={filter === "active"} onClick={() => setFilter("active")} />
           <FilterChip label="מושהים" active={filter === "paused"} onClick={() => setFilter("paused")} />
@@ -133,7 +129,7 @@ export default function AutomationsPage() {
           variants={containerVariants}
           initial="hidden"
           animate="show"
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
         >
           <AnimatePresence mode="popLayout">
             {filteredList.map((automation) => (
@@ -158,13 +154,7 @@ export default function AutomationsPage() {
 
 /* ===== Components ===== */
 
-function AutomationCard({
-  data,
-  onToggle,
-}: {
-  data: Automation;
-  onToggle: () => void;
-}) {
+function AutomationCard({ data, onToggle }: { data: Automation; onToggle: () => void; }) {
   const isActive = data.status === "active";
   const isDraft = data.status === "draft";
 
@@ -177,58 +167,46 @@ function AutomationCard({
       exit="exit"
       className={`
         relative flex flex-col justify-between
-        bg-white border-2 border-slate-900 rounded-2xl p-6
+        bg-white border-2 border-slate-900 rounded-2xl p-5 md:p-6
         shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]
         hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(15,23,42,1)]
         transition-all duration-300
         ${isDraft ? "opacity-70 grayscale-[0.5] border-dashed" : ""}
       `}
     >
-      {/* Card Header */}
       <div className="flex justify-between items-start mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-xl">
+          <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center text-xl shrink-0">
             {data.triggerIcon}
           </div>
           <div>
-            <h3 className="font-bold text-slate-900 leading-tight">{data.name}</h3>
+            <h3 className="font-bold text-slate-900 leading-tight text-base md:text-lg">{data.name}</h3>
             <span className="text-xs text-slate-500 font-medium flex items-center gap-1 mt-1">
               {data.trigger}
             </span>
           </div>
         </div>
         
-        {/* iOS Toggle Switch */}
         {!isDraft && (
           <button
             onClick={onToggle}
             className={`
-              w-12 h-7 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300
+              w-12 h-7 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 shrink-0
               ${isActive ? "bg-[#B4F76D] border-2 border-slate-900" : "bg-slate-200 border-2 border-slate-300"}
             `}
           >
             <motion.div
               layout
-              className={`
-                bg-white w-4 h-4 rounded-full shadow-sm border border-slate-200
-              `}
+              className={`bg-white w-4 h-4 rounded-full shadow-sm border border-slate-200`}
               animate={{
-                x: isActive ? 0 : 20, // RTL: Active (left) vs Inactive (right) adjustment might be needed depending on direction
                 backgroundColor: isActive ? "#0F172A" : "#FFFFFF"
               }}
-              // Manual override for RTL direction since flex-direction might confuse framer sometimes
               style={{ marginLeft: isActive ? "0" : "auto", marginRight: isActive ? "auto" : "0" }}
             />
           </button>
         )}
-        {isDraft && (
-          <span className="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded border border-slate-200">
-            טיוטה
-          </span>
-        )}
       </div>
 
-      {/* Stats Row */}
       <div className="grid grid-cols-2 gap-4 mb-6 p-3 bg-slate-50 rounded-xl border border-slate-100">
         <div>
           <span className="block text-[10px] uppercase tracking-wider text-slate-400 font-bold">הפעלות</span>
@@ -240,7 +218,6 @@ function AutomationCard({
         </div>
       </div>
 
-      {/* Footer Actions */}
       <div className="flex items-center gap-3 mt-auto pt-4 border-t border-slate-100">
         <button className="text-sm font-bold text-slate-900 hover:text-blue-600 transition-colors flex items-center gap-1">
           ✏️ עריכה

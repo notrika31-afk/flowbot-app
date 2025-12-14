@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { signToken } from "@/lib/auth"; // הפונקציה שלך מהספרייה
+import { signToken } from "@/lib/auth";
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma"; // חיבור למסד הנתונים האמיתי
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,43 +19,47 @@ export async function POST(request: Request) {
       );
     }
 
-    /* 2. אימות משתמש (Mock DB Check)
-       במערכת אמיתית: כאן תהיה שליפה מ-Prisma/Mongoose והשוואת Hash של הסיסמה.
-       כרגע: נגדיר משתמש קבוע לבדיקות כדי שהלוגין יעבוד.
-    */
-    const MOCK_USER = {
-      email: "admin@flowbot.co",
-      password: "123", // סיסמה לדוגמה
-      id: "user_real_db_123",
-      role: "ADMIN" as const
-    };
+    // 2. חיפוש המשתמש ב-DB האמיתי
+    const user = await prisma.user.findUnique({
+      where: { email: email },
+    });
 
-    // בדיקה אם המשתמש שהוזן תואם למשתמש הדמה
-    // (או תאפשר כל כניסה אם אתה רוצה רק לבדוק את ה-UI, אבל עדיף ככה)
-    if (email !== MOCK_USER.email || password !== MOCK_USER.password) {
+    // 3. בדיקת סיסמה
+    // הערה: כרגע זה משווה טקסט רגיל (בהתאם לקוד ההרשמה).
+    // בעתיד נשדרג להשוואת Hash (כמו bcrypt.compare)
+    if (!user || user.password !== password) {
       return NextResponse.json(
         { error: "אימייל או סיסמה שגויים" },
         { status: 401 }
       );
     }
 
-    // 3. יצירת טוקן באמצעות הספרייה שלך
-    // חשוב: זה יזרוק שגיאה אם אין JWT_SECRET ב-.env
+    // 4. יצירת טוקן
     const token = signToken({
-      userId: MOCK_USER.id,
-      role: MOCK_USER.role,
+      userId: user.id,
+      email: user.email,
+      role: user.role || 'USER',
     });
 
-    // 4. הגדרת הקוקי בדפדפן
+    // 5. הגדרת הקוקי בדפדפן
     cookies().set("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 ימים
+      maxAge: 60 * 60 * 24 * 30, // 30 יום (תואם להרשמה)
       sameSite: "lax",
     });
 
-    return NextResponse.json({ success: true });
+    // החזרת תשובה חיובית עם פרטי המשתמש (לשימוש בקונטקסט בלקוח)
+    return NextResponse.json({ 
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
+    });
 
   } catch (error: any) {
     console.error("[LOGIN_ERROR]", error);
@@ -68,7 +73,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "שגיאת שרת פנימית" },
+      { error: "שגיאת שרת פנימית בעת ההתחברות" },
       { status: 500 }
     );
   }

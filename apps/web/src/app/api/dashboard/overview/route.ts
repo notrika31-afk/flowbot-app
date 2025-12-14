@@ -8,73 +8,50 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
-    // 1. זיהוי המשתמש - עם הגנה מפני שגיאות בניית סטטית
+    // 1. זיהוי המשתמש
     let user: any = null;
     try {
       user = await getUserSession();
     } catch (authError) {
-      // אם יש שגיאה בשליפת הסשן (למשל בזמן בנייה), נחזור null
-      // זה לא יעצור את הבנייה
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     if (!user || !user.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // 2. שליפת נתונים במקביל (עם התיקון ל-ownerId)
+    // 2. שליפת נתונים
     const [
       activeBotsCount,
       automationsCount,
-      newLeadsCount,
-      totalMessagesCount
+      newLeadsCount
+      // הורדנו זמנית את totalMessagesCount כי הטבלה לא נמצאה
     ] = await Promise.all([
       
-      // א. ספירת בוטים (תוקן ל-ownerId)
+      // א. ספירת בוטים
       prisma.bot.count({
         where: {
-          ownerId: user.id, // <--- התיקון כאן
+          ownerId: user.id,
           isActive: true, 
         },
       }).catch(() => 0),
 
-      // ב. ספירת Flows (תוקן ל-bot: { ownerId: ... })
+      // ב. ספירת Flows
       prisma.flow.count({
         where: {
-          bot: {
-            ownerId: user.id, // <--- התיקון כאן
-          },
-          status: 'PUBLISHED',
+          bot: { ownerId: user.id },
+          isPublished: true,
         },
       }).catch(() => 0),
 
-      // ג. ספירת לידים (תוקן ל-ownerId)
+      // ג. ספירת לידים
       prisma.contact.count({
         where: {
-          bot: {
-            ownerId: user.id, // <--- התיקון כאן
-          },
-          createdAt: {
-            gte: thirtyDaysAgo,
-          },
-        },
-      }).catch(() => 0),
-
-      // ד. ספירת הודעות (תוקן ל-ownerId)
-      prisma.messageLog.count({
-        where: {
-          bot: {
-            ownerId: user.id, // <--- התיקון כאן
-          },
+          bot: { ownerId: user.id },
+          createdAt: { gte: thirtyDaysAgo },
         },
       }).catch(() => 0),
     ]);
@@ -83,13 +60,13 @@ export async function GET(request: NextRequest) {
       activeBots: activeBotsCount,
       activeAutomations: automationsCount,
       newLeads: newLeadsCount,
-      totalMessages: totalMessagesCount,
+      totalMessages: 0, // זמני: מחזירים 0 עד שנבין את שם הטבלה הנכון
     });
 
-  } catch (error) {
-    console.error('Dashboard Overview Error:', error);
+  } catch (error: any) {
+    console.error('Dashboard Overview Fatal Error:', error);
     return NextResponse.json(
-      { error: 'Internal Server Error' },
+      { error: 'Internal Server Error: ' + error.message },
       { status: 500 }
     );
   }

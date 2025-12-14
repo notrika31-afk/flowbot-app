@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-// ייבוא הקבועים שלך
+// ייבוא הקבועים שלך - לא נגעתי
 import {
   PROVIDERS,
   PROVIDER_GROUPS,
@@ -45,16 +45,17 @@ const fade = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
+// אנימציה מותאמת: בנייד זה עולה מלמטה, במחשב זה קופץ במרכז
 const modalAnim = {
-  hidden: { opacity: 0, y: 8, scale: 0.98 },
-  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.2 } },
-  exit: { opacity: 0, y: 6, scale: 0.98, transition: { duration: 0.15 } } as const,
+  hidden: { opacity: 0, y: "100%", scale: 0.95 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", damping: 25, stiffness: 300 } },
+  exit: { opacity: 0, y: "100%", transition: { duration: 0.2 } },
 };
 
 /* ---------- Types ---------- */
 type IntegrationRecord = {
   id: string;
-  provider: string; // תומך גם ב-Enum וגם ב-Slug
+  provider: string;
   status: IntegrationStatusValue;
   metadata?: Record<string, any>;
   updatedAt: string;
@@ -93,7 +94,6 @@ function useIntegrationsManager(): IntegrationsContext {
   const [actionProvider, setActionProvider] = useState<ProviderSlug | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
-  // דגלים למצב החיבורים
   const [connectFlags, setConnectFlags] = useState<ConnectFlags>({
     calendar: false,
     payments: false,
@@ -104,7 +104,6 @@ function useIntegrationsManager(): IntegrationsContext {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // 1. טעינת אינטגרציות מהשרת
   const loadIntegrations = useCallback(async (showLoader = true) => {
     if (showLoader) setLoading(true);
     setError(null);
@@ -119,14 +118,10 @@ function useIntegrationsManager(): IntegrationsContext {
       const data = await res.json();
       const rawIntegrations = data.integrations || {};
 
-      // --- התיקון לנרמול שמות (כדי שהכפתור יהיה ירוק) ---
       const normalizedIntegrations: IntegrationsMap = {};
       
       Object.values(rawIntegrations).forEach((record: any) => {
-          // 1. שומרים את הרשומה המקורית (למשל תחת GOOGLE_CALENDAR)
           normalizedIntegrations[record.provider] = record;
-
-          // 2. מנסים למצוא את ה-Slug המקביל (למשל google-calendar) ושומרים גם תחתיו
           const config = Object.values(PROVIDERS).find(p => p.provider === record.provider);
           if (config) {
               normalizedIntegrations[config.slug] = record;
@@ -143,20 +138,15 @@ function useIntegrationsManager(): IntegrationsContext {
     }
   }, []);
 
-  // 2. ניתוק אינטגרציה
   const handleDisconnect = useCallback(async (slug: ProviderSlug) => {
     if(!confirm("האם אתה בטוח שברצונך לנתק חיבור זה?")) return;
 
     setActionProvider(slug);
-    
-    // מציאת שם הספק האמיתי (Enum) כדי לשלוח לשרת
     const providerEnum = PROVIDERS[slug]?.provider || slug;
 
-    // עדכון אופטימי (מחיקה מהממשק)
     const prevIntegrations = { ...integrations };
     setIntegrations((prev) => {
       const next = { ...prev };
-      // מוחקים גם את ה-Slug וגם את ה-Enum כדי שהכפתור יחזור להיות אפור מיד
       delete next[slug];
       delete next[providerEnum];
       return next;
@@ -172,27 +162,22 @@ function useIntegrationsManager(): IntegrationsContext {
       if (!res.ok) throw new Error("Failed to disconnect");
       
       setToast({ message: "החיבור בוטל בהצלחה", type: "success" });
-      
-      // טעינה מחדש ליתר ביטחון
       await loadIntegrations(false);
 
     } catch (e) {
       console.error(e);
-      setIntegrations(prevIntegrations); // Rollback במקרה של שגיאה
+      setIntegrations(prevIntegrations);
       setToast({ message: "שגיאה בניתוק החיבור", type: "error" });
     } finally {
       setActionProvider(null);
     }
   }, [integrations, loadIntegrations]);
 
-  // 3. התחלת OAuth
   const startOAuth = useCallback(async (slug: ProviderSlug) => {
      setActionProvider(slug);
      try {
        console.log("Starting OAuth flow for:", slug);
-       // הפניה לראוט בשרת שמטפל ב-Login
        window.location.href = `/api/auth/${slug}/login`;
-       
      } catch (e) {
        console.error("OAuth Navigation Error:", e);
        setToast({ message: "שגיאה באתחול החיבור", type: "error" });
@@ -200,13 +185,10 @@ function useIntegrationsManager(): IntegrationsContext {
      }
   }, []);
 
-  // 4. בדיקת חזרה מ-OAuth (Query Params)
   useEffect(() => {
     if (searchParams.get("success") === "true") {
       setToast({ message: "המערכת חוברה בהצלחה!", type: "success" });
       loadIntegrations(false);
-      
-      // ניקוי ה-URL
       router.replace("/builder/connect");
     }
 
@@ -225,7 +207,6 @@ function useIntegrationsManager(): IntegrationsContext {
     loadIntegrations();
   }, [loadIntegrations]);
 
-  // הסתרת ה-Toast אוטומטית
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 3000);
@@ -271,7 +252,6 @@ export default function ConnectPage() {
   const [manualValues, setManualValues] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
-  /* ---------- Manual form helpers ---------- */
   const openManualProvider = useCallback(
     (slug: ProviderSlug) => {
       const provider = PROVIDERS[slug];
@@ -289,7 +269,6 @@ export default function ConnectPage() {
       setFormError(null);
       setActionProvider(slug);
 
-      // המרה ל-Enum עבור השרת
       const providerEnum = PROVIDERS[slug]?.provider || slug;
 
       try {
@@ -323,7 +302,7 @@ export default function ConnectPage() {
   );
 
   return (
-    <main className="min-h-screen w-full bg-slate-50 text-slate-900 font-sans" dir="rtl">
+    <main className="min-h-screen w-full bg-slate-50 text-slate-900 font-sans pb-20 md:pb-0" dir="rtl">
       
       {/* Toast Notification */}
       <AnimatePresence>
@@ -332,7 +311,7 @@ export default function ConnectPage() {
             initial={{ opacity: 0, y: -20, x: "-50%" }}
             animate={{ opacity: 1, y: 0, x: "-50%" }}
             exit={{ opacity: 0, y: -20, x: "-50%" }}
-            className={`fixed top-6 left-1/2 z-50 flex items-center gap-2 px-6 py-3 rounded-full shadow-2xl text-sm font-bold
+            className={`fixed top-6 left-1/2 z-[60] flex items-center gap-2 px-6 py-3 rounded-full shadow-2xl text-sm font-bold w-[90%] max-w-sm justify-center whitespace-nowrap
               ${toast.type === 'success' ? 'bg-black text-white' : 'bg-rose-500 text-white'}
             `}
           >
@@ -343,46 +322,42 @@ export default function ConnectPage() {
       </AnimatePresence>
 
       {/* Container */}
-      <div className="mx-auto max-w-6xl px-4 py-8 md:py-12">
+      <div className="mx-auto max-w-6xl px-4 md:px-6 py-6 md:py-12">
         
-        {/* Header */}
-        <header className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="space-y-2">
-             <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
-                {/* כאן השינוי - מוביל ל-/builder */}
-                <Link href="/builder" className="hover:text-slate-800 transition-colors flex items-center gap-1">
-                   <ArrowRight size={14} />
+        {/* Header - מותאם מובייל */}
+        <header className="mb-6 md:mb-8 flex flex-col gap-4">
+          <div className="flex flex-col-reverse md:flex-row md:items-end justify-between gap-4">
+            <div className="space-y-2">
+               {/* לחצן חזרה גדול ונגיש */}
+               <Link href="/builder" className="hover:text-slate-800 transition-colors flex items-center gap-2 text-sm text-slate-500 py-1 w-fit">
+                   <div className="p-1 rounded-full bg-slate-100"><ArrowRight size={14} /></div>
                    חזרה לעריכת הבוט
-                </Link>
-                <span>/</span>
-                <span>אינטגרציות</span>
-             </div>
-             <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-               מערכות וחיבורים
-             </h1>
-             <p className="text-slate-600 max-w-2xl">
-               כאן מחברים את ה"מוח" של הבוט ליומן, לסליקה ולאתר שלך.
-               <br/>
-               <span className="text-xs text-slate-400">הבוט ידע לבדוק זמינות ולקבוע תורים אוטומטית ברגע שהחיבור פעיל.</span>
-             </p>
-          </div>
+               </Link>
+               <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight leading-tight">
+                 מערכות וחיבורים
+               </h1>
+               <p className="text-sm md:text-base text-slate-600 max-w-2xl leading-relaxed">
+                 כאן מחברים את ה"מוח" של הבוט ליומן, לסליקה ולאתר שלך.
+                 <br/>
+                 <span className="text-xs text-slate-400">הבוט ידע לבדוק זמינות ולקבוע תורים אוטומטית ברגע שהחיבור פעיל.</span>
+               </p>
+            </div>
 
-          <div>
-             <Link
-                href="/builder/whatsapp"
-                className="inline-flex items-center gap-2 rounded-xl px-6 py-3 font-bold text-sm shadow-lg transition-all bg-black text-white hover:bg-slate-800 hover:shadow-xl hover:-translate-y-0.5"
-              >
-                המשך לחיבור וואטסאפ
-                <ArrowLeft size={16} />
-              </Link>
+            <Link
+              href="/builder/whatsapp"
+              className="inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 md:py-3 font-bold text-sm shadow-lg transition-all bg-black text-white hover:bg-slate-800 hover:shadow-xl active:scale-95 w-full md:w-auto"
+            >
+              המשך לחיבור וואטסאפ
+              <ArrowLeft size={16} />
+            </Link>
           </div>
         </header>
 
         {/* Content Area */}
-        <div className="space-y-6">
+        <div className="space-y-4 md:space-y-6">
            
            {error && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 flex items-center gap-2">
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 flex items-center gap-2 animate-pulse">
                 <X size={16} />
                 {error}
               </div>
@@ -391,19 +366,18 @@ export default function ConnectPage() {
            {loading ? (
              <IntegrationSkeleton />
            ) : (
-             <div className="grid gap-6">
+             <div className="grid gap-4 md:gap-6">
                 {PROVIDER_GROUPS.map((group) => (
                    <motion.section
                       key={group.key}
                       variants={fade}
                       initial="hidden"
                       animate="show"
-                      className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm"
+                      className="bg-white rounded-2xl border border-slate-200 p-4 md:p-6 shadow-sm"
                    >
-                      <div className="flex items-center justify-between mb-5 border-b border-slate-100 pb-4">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b border-slate-100 pb-3 gap-1">
                          <div>
-                            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                {/* אייקונים לפי קבוצה - הוספנו as string כדי לפתור את השגיאה */}
+                            <h2 className="text-base md:text-lg font-bold text-slate-900 flex items-center gap-2">
                                 {(group.key as string) === 'calendar' && <Calendar className="w-5 h-5 text-indigo-500" />}
                                 {(group.key as string) === 'data' && <FileSpreadsheet className="w-5 h-5 text-emerald-500" />}
                                 {(group.key as string) === 'integrations' && <Zap className="w-5 h-5 text-orange-500" />}
@@ -412,20 +386,17 @@ export default function ConnectPage() {
                                 {(group.key as string) === 'site' && <Globe className="w-5 h-5 text-cyan-500" />}
                                 {group.title}
                             </h2>
-                            <p className="text-sm text-slate-500">{group.description}</p>
+                            <p className="text-xs md:text-sm text-slate-500 mt-1">{group.description}</p>
                          </div>
                       </div>
 
-                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                         {group.providerSlugs.map((slug) => {
                           const provider = PROVIDERS[slug];
-                          // בדיקת הגנה למקרה שספק לא קיים
                           if (!provider) return null;
                           
-                          // בדיקה האם מחובר (גם לפי Slug וגם לפי Provider)
                           const record = integrations[slug] || integrations[provider.provider];
                           const isConnected = record?.status === "CONNECTED";
-                          
                           const isLoadingAction = actionProvider === slug;
 
                           return (
@@ -492,14 +463,13 @@ function ProviderCard({
 }) {
   const buttonContent = isConnected ? "מחובר" : provider.mode === "manual" ? "הגדר ידנית" : "התחבר";
   
-  // כפתור ירוק אם מחובר, שחור אם לא
   const connectButtonClass = isConnected 
     ? "bg-green-500 text-white hover:bg-green-600 ring-2 ring-green-100" 
-    : "bg-black text-white hover:bg-slate-800";
+    : "bg-black text-white hover:bg-slate-800 active:scale-[0.98]";
 
   return (
     <div
-      className={`relative flex flex-col justify-between p-5 rounded-xl transition-all duration-200
+      className={`relative flex flex-col justify-between p-4 md:p-5 rounded-xl transition-all duration-200
         ${isConnected 
            ? "bg-white border-2 border-green-500/20 shadow-md ring-0" 
            : "bg-slate-50 border border-slate-200 hover:bg-white hover:border-slate-300 hover:shadow-md"
@@ -511,7 +481,6 @@ function ProviderCard({
            <div className={`p-2 rounded-lg border shadow-sm transition-colors
              ${isConnected ? "bg-green-50 text-green-700 border-green-200" : "bg-white text-slate-700 border-slate-100"}
            `}>
-               {/* אייקונים דינמיים */}
                {provider.slug === 'make' ? <Webhook size={20}/> : 
                 provider.slug === 'zapier' ? <Zap size={20}/> :
                 provider.slug === 'zoom' ? <Video size={20}/> :
@@ -530,8 +499,8 @@ function ProviderCard({
            )}
         </div>
         
-        <h3 className="font-bold text-slate-900 mb-1">{provider.name}</h3>
-        <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{provider.description}</p>
+        <h3 className="font-bold text-slate-900 mb-1 text-sm md:text-base">{provider.name}</h3>
+        <p className="text-xs text-slate-500 leading-relaxed line-clamp-2 h-8">{provider.description}</p>
       </div>
 
       <div className="mt-auto pt-2">
@@ -540,11 +509,11 @@ function ProviderCard({
                בקרוב
             </button>
          ) : (
-           <div className="flex gap-2">
+           <div className="flex gap-2 h-9 md:h-10">
               <button 
                  onClick={isConnected ? undefined : onConnect}
                  disabled={loading || isConnected}
-                 className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm
+                 className={`flex-1 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm
                     ${connectButtonClass}
                     ${isConnected ? 'cursor-default opacity-100' : ''}
                  `}
@@ -556,7 +525,7 @@ function ProviderCard({
               {isConnected && (
                  <button 
                     onClick={onDisconnect}
-                    className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-rose-50 hover:text-rose-600 text-slate-600 transition-colors flex items-center justify-center gap-1"
+                    className="px-3 rounded-xl border border-slate-200 hover:bg-rose-50 hover:text-rose-600 text-slate-600 transition-colors flex items-center justify-center gap-1 active:scale-95"
                     title="נתק חיבור"
                  >
                     <X size={14} />
@@ -579,7 +548,7 @@ function IntegrationSkeleton() {
       {[1, 2].map((i) => (
         <div key={i} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm animate-pulse">
            <div className="h-6 w-48 bg-slate-200 rounded mb-6" />
-           <div className="grid sm:grid-cols-3 gap-4">
+           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map(j => (
                  <div key={j} className="h-40 bg-slate-100 rounded-xl" />
               ))}
@@ -609,7 +578,7 @@ function ManualIntegrationForm({
   error: string | null;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 md:space-y-6">
       <div className="bg-slate-50 p-4 rounded-xl text-sm text-slate-600 border border-slate-100">
          הזן פרטים עבור <strong>{provider.name}</strong>.
       </div>
@@ -623,7 +592,8 @@ function ManualIntegrationForm({
               onChange={(e) => onChange(field.name, e.target.value)}
               placeholder={field.placeholder}
               type={field.type}
-              className="w-full rounded-xl bg-white border border-slate-200 px-4 py-3 text-sm focus:border-black focus:ring-0 outline-none transition-all placeholder:text-slate-300"
+              // text-base מונע זום אוטומטי במובייל באייפון
+              className="w-full rounded-xl bg-white border border-slate-200 px-4 py-3 text-base md:text-sm focus:border-black focus:ring-0 outline-none transition-all placeholder:text-slate-300"
             />
           </div>
         ))}
@@ -635,7 +605,7 @@ function ManualIntegrationForm({
         <button
           onClick={onSubmit}
           disabled={loading}
-          className="w-full bg-black text-white h-12 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+          className="w-full bg-black text-white h-12 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl active:scale-[0.98]"
         >
           {loading && <Loader2 size={16} className="animate-spin" />}
           שמור חיבור
@@ -646,14 +616,14 @@ function ManualIntegrationForm({
 }
 
 // =========================================================
-// Sheet
+// Sheet (Mobile Drawer / Desktop Modal)
 // =========================================================
 function Sheet({ show, onClose, title, children }: { show: boolean; onClose: () => void; title: string; children: ReactNode; }) {
   return (
     <AnimatePresence>
       {show && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/40 backdrop-blur-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -664,14 +634,14 @@ function Sheet({ show, onClose, title, children }: { show: boolean; onClose: () 
             initial="hidden"
             animate="show"
             exit="exit"
-            className="relative w-full sm:w-[500px] bg-white rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-100"
+            className="relative w-full sm:w-[500px] bg-white rounded-t-[24px] sm:rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border-t sm:border border-slate-100"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-white">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-white shrink-0">
               <h3 className="text-lg font-black text-slate-900">{title}</h3>
               <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition text-slate-500 hover:text-slate-900"><X size={20}/></button>
             </div>
-            <div className="p-6 overflow-y-auto">{children}</div>
+            <div className="p-6 overflow-y-auto pb-10 sm:pb-6">{children}</div>
           </motion.div>
         </motion.div>
       )}

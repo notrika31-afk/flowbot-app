@@ -26,8 +26,10 @@ export default async function RootLayout({
   const user = await getUserSession();
 
   return (
-    <html lang="he" dir="rtl">
+    // הוספתי suppressHydrationWarning כדי למנוע שגיאות Hydration מתוספי דפדפן
+    <html lang="he" dir="rtl" suppressHydrationWarning>
       <body
+        suppressHydrationWarning
         className={`
           ${font.className}
           min-h-screen

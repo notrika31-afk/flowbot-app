@@ -1,4 +1,5 @@
 "use client";
+
 export const dynamic = 'force-dynamic';
 import { useEffect } from "react";
 import Link from "next/link";
@@ -135,7 +136,7 @@ function BubbleMe({ children, i = 0 }: { children: React.ReactNode; i?: number }
 }
 
 
-// --- רכיבי סקשנים (Trust, Value, Testimonials) ---
+// --- רכיבי סקשנים (Trust, Value) ---
 
 function TrustFeature({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
     return (
@@ -159,7 +160,7 @@ function TrustFeature({ icon, title, desc }: { icon: React.ReactNode, title: str
 
 function TrustSection() {
     return (
-        <section className="px-4 sm:px-8 pb-10">
+        <section className="px-5 sm:px-8 pb-10">
             <motion.div
                 className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 p-6 rounded-3xl border-4 border-white/70 shadow-[0_18px_45px_rgba(15,23,42,0.15)] bg-gradient-to-br from-white to-[#f0f2f7]"
                 initial="hidden"
@@ -215,7 +216,7 @@ function ValueSection() {
   const roiValue = 4200; 
   
   return (
-    <section className="px-4 sm:px-8 pb-12 pt-4">
+    <section className="px-5 sm:px-8 pb-12 pt-4">
       <motion.div 
         className="text-center mb-12"
         initial="hidden"
@@ -259,7 +260,7 @@ function ValueSection() {
       >
         
         {/* --- התאמה לנייד: גלילה אופקית --- */}
-        <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
+        <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
             <div className="grid grid-cols-5 pb-3 border-b-2 border-slate-200/70 text-[10px] uppercase font-bold tracking-wider text-slate-500 text-center min-w-[600px]">
                 <span className="col-span-2 text-right pr-12">מדד ביצוע</span>
                 <span className="text-red-700/80">שיטה ידנית</span>
@@ -345,102 +346,7 @@ function ValueSection() {
   );
 }
 
-function TestimonialCard({ text, name, title, rating, i }: { text: string, name: string, title: string, rating: number, i: number }) {
-    return (
-        <motion.div
-            className="rounded-2xl p-6 bg-white border border-slate-200 shadow-[0_10px_30px_rgba(15,23,42,0.1)] flex flex-col justify-between h-full"
-            variants={fadeUp}
-            custom={i + 1}
-        >
-            <div className="flex items-center gap-2 mb-4 text-amber-500">
-                {Array.from({ length: rating }).map((_, idx) => (
-                    <Star key={idx} size={16} fill="currentColor" className="text-amber-500" />
-                ))}
-            </div>
-            
-            <Quote size={24} className="text-slate-200 mb-4" />
-
-            <p className="text-[13px] font-medium text-slate-800 leading-relaxed italic flex-1">
-                "{text}"
-            </p>
-
-            <div className="mt-5 pt-3 border-t border-slate-100">
-                <p className="text-sm font-bold text-slate-900">{name}</p>
-                <p className="text-[11px] text-slate-500">{title}</p>
-            </div>
-        </motion.div>
-    );
-}
-
-function TestimonialsSection() {
-    const testimonialsData = [
-        { 
-            text: "הרובוט קיצר לנו את זמן התגובה הממוצע מ-45 דקות ל-5 שניות. הלידים פשוט לא מחכים יותר!", 
-            name: "איתי לוי", 
-            title: "מנכ\"ל, לוי פתרונות דיגיטליים", 
-            rating: 5 
-        },
-        { 
-            text: "היה חשוב לנו מערכת יציבה ומאובטחת. FlowBot עבר את כל הבדיקות שלנו ועושה את העבודה בצורה מושלמת.", 
-            name: "נועה כהן", 
-            title: "ראש צוות אוטומציה, קבוצת נגה", 
-            rating: 5 
-        },
-        { 
-            text: "הצלחנו להכפיל את כמות הפגישות שנקבעו דרך הווטסאפ בלי להוסיף עובד אחד. זה פשוט מחליף מוקד שירות שלם.", 
-            name: "דניאל שקד", 
-            title: "בעלים, שקד מערכות", 
-            rating: 5 
-        },
-    ];
-
-    return (
-        <section className="px-4 sm:px-8 pb-12 pt-4">
-            <motion.div
-                className="text-center mb-10"
-                initial="hidden"
-                whileInView="show"
-                variants={stagger}
-                viewport={{ once: true, amount: 0.2 }}
-            >
-                <motion.p
-                    className="text-[10px] sm:text-[11px] tracking-[0.2em] uppercase text-slate-500 mb-3"
-                    variants={fadeUp}
-                    custom={0}
-                >
-                    מה הלקוחות שלנו אומרים
-                </motion.p>
-                <motion.h2
-                    className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mb-3 leading-[1.1]"
-                    variants={fadeUp}
-                    custom={1}
-                >
-                    ההוכחה נמצאת בשיחות.
-                </motion.h2>
-            </motion.div>
-
-            <motion.div
-                className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6"
-                initial="hidden"
-                whileInView="show"
-                variants={stagger}
-                viewport={{ once: true, amount: 0.1 }}
-            >
-                {testimonialsData.map((t, index) => (
-                    <TestimonialCard
-                        key={index}
-                        text={t.text}
-                        name={t.name}
-                        title={t.title}
-                        rating={t.rating}
-                        i={index}
-                    />
-                ))}
-            </motion.div>
-        </section>
-    );
-}
-
+// נמחק סקשן Testimonials לפי בקשתך
 
 /* -------------------------------------------------------------------------- */
 /* הרכיב הראשי - HomePage                               */
@@ -455,14 +361,15 @@ export default function HomePage() {
   }, []);
 
   return (
-    <main className="min-h-screen w-full bg-[#e9edf5] text-slate-900 flex items-center justify-center px-2 py-4 sm:px-4 sm:py-6 overflow-x-hidden">
+    // תוקן: PADDING בנייד ומרווחים כלליים
+    <main className="min-h-screen w-full bg-[#e9edf5] text-slate-900 flex items-center justify-center px-3 py-4 sm:px-4 sm:py-6 overflow-x-hidden">
       {/* ===== FRAME שחור/יוקרתי עם קצת חיים ===== */}
       <div className="relative w-full max-w-6xl mx-auto rounded-[24px] md:rounded-[46px] border border-slate-900/80 bg-[#f5f7fb] shadow-[0_10px_40px_rgba(15,23,42,0.4)] md:shadow-[0_28px_80px_rgba(15,23,42,0.55)] overflow-hidden">
 
         {/* הילה וגלואו עדין סביב המסגרת */}
         <div className="pointer-events-none absolute -inset-[1px] rounded-[24px] md:rounded-[46px] border border-slate-900/70" aria-hidden />
         <div
-          className="pointer-events-none absolute inset-0 rounded-[24px] md:rounded-[46px] opacity-60 mix-blend-soft-light animate-pulse"
+          className="pointer-events-none absolute inset-0 rounded-[24px] md:rounded-[46px] opacity-60 mix-blend-soft-light"
           aria-hidden
           style={{
             backgroundImage:
@@ -472,8 +379,8 @@ export default function HomePage() {
 
         {/* ===== תוכן העמוד ===== */}
         <div className="relative z-10">
-          {/* ניווט עליון */}
-          <header className="px-4 sm:px-8 pt-4 sm:pt-6 pb-4 flex items-center justify-between">
+          {/* ניווט עליון - רק לדסקטופ כי בנייד יש לנו Sticky Navbar נפרד */}
+          <header className="hidden md:flex px-4 sm:px-8 pt-4 sm:pt-6 pb-4 items-center justify-between">
             {/* לוגו גליף חדש */}
             <div className="flex items-center gap-3">
               <div className="relative flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl bg-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] border border-slate-900/10 overflow-hidden">
@@ -494,42 +401,26 @@ export default function HomePage() {
               </div>
             </div>
 
-            <nav className="hidden md:flex items-center gap-3 text-xs">
+            <nav className="flex items-center gap-3 text-xs">
               <Link
                 href="/builder"
                 className="px-4 py-2 rounded-full border border-slate-200 bg-white/70 text-slate-700 shadow-sm hover:shadow-md hover:-translate-y-[1px] transition text-[12px] flex items-center gap-1"
               >
                 🧠 בונה תסריט
               </Link>
-              <Link
-                href="/login"
-                className="px-4 py-2 rounded-full border border-transparent text-slate-600 hover:bg-slate-100/70 hover:-translate-y-[1px] transition text-[12px]"
-              >
-                התחברות
-              </Link>
-              <Link
-                href="/register"
-                className="px-5 py-2.5 rounded-full bg-[#506DFF] text-white text-[12px] font-semibold shadow-[0_10px_25px_rgba(80,109,255,0.45)] hover:shadow-[0_16px_40px_rgba(80,109,255,0.6)] hover:-translate-y-[1px] transition"
-              >
-                פתח חשבון
-              </Link>
             </nav>
-
-            {/* כפתור כניסה למובייל (חדש) */}
-            <Link 
-                href="/login"
-                className="md:hidden px-4 py-2 rounded-full bg-slate-900 text-white text-xs font-bold"
-            >
-                כניסה
-            </Link>
           </header>
+          
+          {/* ריווח מלאכותי לנייד בגלל ה-Navbar */}
+          <div className="h-4 md:hidden"></div>
 
           {/* HERO */}
-          <section className="px-4 sm:px-8 pb-10 pt-4 flex flex-col-reverse md:grid md:grid-cols-[1.05fr_0.95fr] gap-8 md:gap-10 items-center">
+          <section className="px-5 sm:px-8 pb-10 pt-4 flex flex-col-reverse md:grid md:grid-cols-[1.05fr_0.95fr] gap-8 md:gap-10 items-center">
             {/* טקסט מימין */}
             <motion.div
               className="text-center md:text-right"
               variants={stagger}
+              // תיקון: טעינה מיידית
               initial="hidden"
               animate="show"
             >
@@ -598,11 +489,12 @@ export default function HomePage() {
             <motion.div
               className="relative flex justify-center items-center w-full"
               variants={fadeUp}
+              // תיקון: טעינה מיידית
               initial="hidden"
               animate="show"
               custom={1}
             >
-              {/* לוח צף לבן/אפור עם עומק */}
+              {/* לוח צף לבן/אפור עם עומק - מותאם רוחב בנייד */}
               <div className="relative w-full max-w-[340px] md:max-w-[380px] rounded-[32px] bg-gradient-to-br from-white to-[#e8ecf7] border border-slate-200 shadow-[0_18px_45px_rgba(15,23,42,0.35)] px-5 py-5">
                 {/* "אנטנות" UI קטנות למעלה */}
                 <div className="flex items-center justify-between mb-4 text-[11px] text-slate-400">
@@ -651,7 +543,7 @@ export default function HomePage() {
           {/* שאר הסקשנים... */}
           <TrustSection />
 
-          <section className="px-4 sm:px-8 pb-10">
+          <section className="px-5 sm:px-8 pb-10">
             <h2 className="text-center text-xl md:text-2xl font-semibold text-slate-900 mb-6">
               למה לבחור ב־FlowBot?
             </h2>
@@ -672,9 +564,10 @@ export default function HomePage() {
           </section>
 
           <ValueSection />
-          <TestimonialsSection />
+          
+          {/* הוסר אזור המלצות */}
 
-          <section id="how" className="px-4 sm:px-8 pb-10">
+          <section id="how" className="px-5 sm:px-8 pb-10">
             <h2 className="text-center text-xl md:text-2xl font-semibold text-slate-900 mb-7">
               איך זה עובד?
             </h2>
@@ -697,7 +590,7 @@ export default function HomePage() {
           </section>
 
           {/* פוטר */}
-          <footer className="px-4 sm:px-8 pb-5 text-[11px] text-slate-400 flex flex-col sm:flex-row items-center justify-between border-t border-slate-200/70 gap-2">
+          <footer className="px-5 sm:px-8 pb-5 text-[11px] text-slate-400 flex flex-col sm:flex-row items-center justify-between border-t border-slate-200/70 gap-2">
             <span>FlowBot © 2025 — כל הזכויות שמורות</span>
             <span className="text-center sm:text-left">
               נבנה עם דגש על אבטחה, מהירות וחוויית משתמש.
