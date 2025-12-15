@@ -4,20 +4,20 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
-  ArrowLeft, 
-  ShieldCheck, 
   Facebook, 
   CheckCircle2,
   Loader2,
   Zap,
-  MessageSquare
+  MousePointerClick,
+  CheckSquare,
+  AlertCircle
 } from "lucide-react";
 
 export default function WhatsappConnectionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // ניהול מצבים לחוויית משתמש עשירה
+  // ניהול מצבים
   const [status, setStatus] = useState<'IDLE' | 'CONNECTING' | 'PROCESSING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -27,7 +27,6 @@ export default function WhatsappConnectionPage() {
     const error = searchParams?.get("error");
 
     if (success === "true") {
-      // חזרנו עם אישור -> מתחילים תהליך פרסום
       handleAutoPublish();
     } else if (error) {
       setStatus('ERROR');
@@ -41,8 +40,6 @@ export default function WhatsappConnectionPage() {
     setErrorMessage(null);
 
     const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
-    
-    // וודא שהכתובת הזו מוגדרת בדיוק ככה ב-Valid OAuth Redirect URIs בפייסבוק
     const callbackUrl = `${window.location.origin}/api/auth/facebook/callback`; 
 
     if (!appId) {
@@ -51,8 +48,6 @@ export default function WhatsappConnectionPage() {
         return;
     }
 
-    // הפניה לדיאלוג של פייסבוק
-    // scope: ההרשאות שאנחנו מבקשים
     const targetUrl = `https://www.facebook.com/v22.0/dialog/oauth?client_id=${appId}&redirect_uri=${callbackUrl}&scope=whatsapp_business_management,whatsapp_business_messaging&response_type=code`;
     
     window.location.href = targetUrl;
@@ -68,8 +63,6 @@ export default function WhatsappConnectionPage() {
           throw new Error("לא נמצא בוט שמור בזיכרון. נא לחזור לבילדר.");
       }
 
-      // קריאה לשרת לפרסום הבוט
-      // השרת יזהה שיש למשתמש כבר טוקן שמור (מהשלב הקודם) וישתמש בו
       const res = await fetch('/api/bot/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -83,12 +76,10 @@ export default function WhatsappConnectionPage() {
           throw new Error("שגיאה בפרסום הבוט.");
       }
 
-      // הצלחה מלאה
       setStatus('SUCCESS');
       localStorage.removeItem('flowbot_draft_flow');
       sessionStorage.setItem("bot_published_success", "true");
       
-      // מעבר לעמוד הבא אחרי 2 שניות
       setTimeout(() => {
           router.push("/builder/publish"); 
       }, 2000);
@@ -108,7 +99,7 @@ export default function WhatsappConnectionPage() {
         {/* אלמנט רקע דקורטיבי */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-100/40 rounded-full blur-[100px] -z-10" />
 
-        {/* --- צד ימין: הסבר ומכירה --- */}
+        {/* --- צד ימין: הסבר ומדריך (מעודכן) --- */}
         <div className="flex flex-col gap-6 order-2 lg:order-1 text-right">
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
@@ -121,26 +112,44 @@ export default function WhatsappConnectionPage() {
                 </div>
                 
                 <h1 className="text-4xl md:text-5xl font-black text-neutral-900 mb-4 leading-tight">
-                    לחבר את הבוט <br/>
+                    מה קורה בחלון <br/>
                     <span className="text-transparent bg-clip-text bg-gradient-to-l from-blue-600 to-blue-400">
-                        בלי להסתבך.
+                        שיפתח עכשיו?
                     </span>
                 </h1>
                 
-                <p className="text-lg text-neutral-500 leading-relaxed max-w-lg">
-                    הקמנו תהליך אוטומטי חכם. 
-                    במקום להעתיק קודים ולהתעסק עם הגדרות טכניות, פשוט התחברו לחשבון הפייסבוק העסקי שלכם – ואנחנו נעשה את השאר.
+                <p className="text-lg text-neutral-500 leading-relaxed max-w-lg mb-6">
+                    התהליך הוא אוטומטי ובטוח. כדי שהכל יעבוד חלק, הנה 3 הדברים שתתבקשו לעשות בחלון של פייסבוק:
                 </p>
             </motion.div>
 
-            <div className="space-y-4 pt-4 border-t border-neutral-200/60">
-                <FeatureItem icon={<ShieldCheck className="text-green-500"/>} text="חיבור רשמי ומאובטח ל-Meta (WhatsApp API)" />
-                <FeatureItem icon={<Zap className="text-amber-500"/>} text="זיהוי אוטומטי של מספר הטלפון העסקי" />
-                <FeatureItem icon={<MessageSquare className="text-purple-500"/>} text="הבוט מתחיל לענות מיד בסיום החיבור" />
+            {/* רשימת הנחיות ברורה */}
+            <div className="space-y-4">
+                <GuideItem 
+                    icon={<MousePointerClick className="text-purple-500"/>} 
+                    title="בחירת העסק" 
+                    desc="תתבקשו לבחור את חשבון ה-Meta Business אליו שייך המספר." 
+                />
+                <GuideItem 
+                    icon={<CheckSquare className="text-green-500"/>} 
+                    title="בחירת מספר טלפון" 
+                    desc="בחרו את המספר ממנו הבוט ישלח ויקבל הודעות." 
+                />
+                
+                {/* הערה חשובה מודגשת */}
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex gap-3 items-start mt-2">
+                    <AlertCircle className="text-amber-500 shrink-0 mt-0.5" size={20} />
+                    <div>
+                        <span className="block font-bold text-neutral-800 text-sm mb-1">הכי חשוב: הרשאות</span>
+                        <p className="text-sm text-neutral-600 leading-relaxed">
+                            בשלב האישור, <span className="font-bold underline decoration-amber-300 decoration-2">אל תורידו את הסימון</span> מהרשאות שפייסבוק מבקש. בלי הרשאות מלאות, הבוט לא יוכל לקרוא הודעות.
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
 
-        {/* --- צד שמאל: כרטיס הפעולה --- */}
+        {/* --- צד שמאל: כרטיס הפעולה (ללא שינוי) --- */}
         <motion.div 
             className="w-full relative order-1 lg:order-2"
             initial={{ opacity: 0, scale: 0.95 }}
@@ -149,7 +158,6 @@ export default function WhatsappConnectionPage() {
         >
             <div className="bg-white rounded-3xl border border-neutral-200 shadow-xl shadow-neutral-200/40 p-8 md:p-10 flex flex-col items-center text-center relative overflow-hidden">
                 
-                {/* מצב הצלחה */}
                 {status === 'SUCCESS' && (
                     <motion.div 
                         initial={{ opacity: 0, scale: 0.8 }}
@@ -165,7 +173,6 @@ export default function WhatsappConnectionPage() {
                     </motion.div>
                 )}
 
-                {/* אייקון ראשי */}
                 <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6 relative group">
                     <div className="absolute inset-0 bg-blue-400/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
                     <Facebook size={40} fill="currentColor" className="relative z-10" />
@@ -181,14 +188,12 @@ export default function WhatsappConnectionPage() {
                         : 'בלחיצה על הכפתור תועבר לאישור מהיר מול פייסבוק.'}
                 </p>
 
-                {/* הודעת שגיאה */}
                 {errorMessage && (
                     <div className="mb-6 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 w-full font-medium">
                         {errorMessage}
                     </div>
                 )}
 
-                {/* הכפתור הראשי */}
                 <button
                     onClick={handleConnectFacebook}
                     disabled={status === 'CONNECTING' || status === 'PROCESSING'}
@@ -230,14 +235,17 @@ export default function WhatsappConnectionPage() {
   );
 }
 
-// קומפוננטה קטנה לשורות היתרונות
-function FeatureItem({ icon, text }: { icon: any, text: string }) {
+// קומפוננטה משודרגת לרשימת ההנחיות
+function GuideItem({ icon, title, desc }: { icon: any, title: string, desc: string }) {
     return (
-        <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-neutral-100 shadow-sm">
-            <div className="shrink-0 w-8 h-8 flex items-center justify-center bg-neutral-50 rounded-lg">
+        <div className="flex items-start gap-4 p-4 bg-white rounded-xl border border-neutral-100 shadow-sm hover:border-blue-100 transition-colors">
+            <div className="shrink-0 w-10 h-10 flex items-center justify-center bg-neutral-50 rounded-lg">
                 {icon}
             </div>
-            <span className="text-sm font-bold text-neutral-700">{text}</span>
+            <div>
+                <span className="block text-base font-bold text-neutral-800 mb-0.5">{title}</span>
+                <span className="text-sm text-neutral-500 leading-snug block">{desc}</span>
+            </div>
         </div>
     );
 }

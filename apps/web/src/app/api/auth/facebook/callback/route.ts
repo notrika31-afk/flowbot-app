@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserSession } from "@/lib/auth"; // וודא שהנתיב נכון לפונקציית ה-Session שלך
+import { getUserSession } from "@/lib/auth"; 
 
 export const dynamic = "force-dynamic";
 
@@ -12,12 +12,11 @@ export async function GET(req: Request) {
     const error = searchParams.get("error");
 
     if (error || !code) {
+      console.error("Facebook Auth Error:", error);
       return NextResponse.redirect(new URL("/builder/whatsapp?error=auth_failed", req.url));
     }
 
-    // 2. זיהוי המשתמש באתר שלך
-    // אנחנו חייבים לדעת מי המשתמש כדי לשמור לו את הטוקן
-    // בגלל שזו קריאת API, ה-Cookie אמור לעבור
+    // 2. זיהוי המשתמש
     const session = await getUserSession();
     if (!session?.id) {
        return NextResponse.redirect(new URL("/login", req.url));
@@ -26,7 +25,8 @@ export async function GET(req: Request) {
     // 3. החלפת הקוד ב-Token
     const appId = process.env.FACEBOOK_APP_ID;
     const appSecret = process.env.FACEBOOK_APP_SECRET;
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://flowbot-gzn7st34s-notrika31-5984s-projects.vercel.app"}/api/auth/facebook/callback`;
+    // משתמשים בכתובת הראשית החדשה שלך
+    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://flowbot-app.vercel.app"}/api/auth/facebook/callback`;
 
     const tokenUrl = `https://graph.facebook.com/v22.0/oauth/access_token?client_id=${appId}&redirect_uri=${redirectUri}&client_secret=${appSecret}&code=${code}`;
 
@@ -34,43 +34,40 @@ export async function GET(req: Request) {
     const tokenData = await tokenRes.json();
 
     if (tokenData.error) {
-      console.error("Token Exchange Error:", tokenData.error);
+      console.error("Token Exchange Failed:", tokenData.error);
       return NextResponse.redirect(new URL("/builder/whatsapp?error=token_exchange_failed", req.url));
     }
 
     const accessToken = tokenData.access_token;
 
-    // 4. שליפת פרטי העסק (WABA ID + Phone ID) באמצעות הטוקן
-    // אנחנו מבקשים מפייסבוק: תביא לי את חשבונות הוואטסאפ המחוברים ליוזר הזה
-    const accountsUrl = `https://graph.facebook.com/v22.0/me?fields=id,name,accounts&access_token=${accessToken}`;
-    const accountsRes = await fetch(accountsUrl);
-    const accountsData = await accountsRes.json();
+    // --- החלק שהחזרנו: שליפה אוטומטית של מספר הטלפון ---
+    
+    // אנו שואלים את פייסבוק: תביא לי את חשבונות הוואטסאפ (WABA) של היוזר הזה
+    // ואת מספרי הטלפון שמחוברים אליהם.
+    const detailsUrl = `https://graph.facebook.com/v22.0/me?fields=id,name,accounts{name,phone_numbers{id,display_phone_number}}&access_token=${accessToken}`;
+    
+    const detailsRes = await fetch(detailsUrl);
+    const detailsData = await detailsRes.json();
 
-    // לוגיקה פשוטה: לוקחים את העסק הראשון והטלפון הראשון שמוצאים
-    // (בגרסה מתקדמת יותר, אפשר לתת למשתמש לבחור אם יש לו כמה עסקים)
-    
-    // הערה: המבנה של התשובה משתנה לפעמים תלוי בסוג החשבון.
-    // לצורך ה-MVP, נניח שהמשתמש יצר עסק חדש בתהליך ה-Embedded
-    
-    // במקום להסתבך עם חיפושים, נשתמש בטוקן כדי לשמור את החיבור
-    // הלקוח יצטרך רק לבחור מספר אם יש כמה, אבל לרוב יש אחד.
-    
-    // לצורך ה-MVP האוטומטי, אנחנו נשמור את הטוקן, 
-    // ובקריאה הבאה (Publish) נשתמש בו כדי למצוא את ה-ID המדויק אם חסר.
-    // אבל עדיף לנסות למצוא עכשיו:
-    
-    let phoneId = "";
-    let wabaId = "";
+    let fetchedPhoneId = "pending_manual_selection";
+    let fetchedWabaId = "pending_manual_selection";
 
-    // ניסיון לשלוף WABA IDs (דורש הרשאת whatsapp_business_management)
-    const wabaRes = await fetch(`https://graph.facebook.com/v22.0/me/businesses?access_token=${accessToken}`);
-    const wabaData = await wabaRes.json();
+    // לוגיקה חכמה: לוקחים את המספר הראשון שמוצאים
+    try {
+        if (detailsData.accounts && detailsData.accounts.data && detailsData.accounts.data.length > 0) {
+            const firstAccount = detailsData.accounts.data[0];
+            fetchedWabaId = firstAccount.id; // מזהה העסק (WABA ID)
 
-    // אם זה מסובך מדי לשליפה עכשיו, נשמור לפחות את הטוקן
-    // והמשתמש יוכל להשלים או שהמערכת תשלים אוטומטית.
-    
-    // 5. שמירה לדאטה-בייס
-    // נבדוק אם יש כבר חיבור ונחליף, או ניצור חדש
+            if (firstAccount.phone_numbers && firstAccount.phone_numbers.data && firstAccount.phone_numbers.data.length > 0) {
+                fetchedPhoneId = firstAccount.phone_numbers.data[0].id; // מזהה הטלפון (Phone ID)
+                console.log("✅ Successfully auto-detected Phone ID:", fetchedPhoneId);
+            }
+        }
+    } catch (e) {
+        console.warn("⚠️ Could not auto-fetch phone details, saving token only.");
+    }
+
+    // 5. שמירה לדאטה-בייס (טוקן + מספר טלפון)
     const existingConnection = await prisma.whatsAppConnection.findFirst({
         where: { userId: session.id }
     });
@@ -80,7 +77,8 @@ export async function GET(req: Request) {
             where: { id: existingConnection.id },
             data: {
                 accessToken: accessToken,
-                // אם הצלחנו להשיג IDs נעדכן, אחרת נשאיר או נשים זמני
+                wabaId: fetchedWabaId,
+                phoneNumberId: fetchedPhoneId,
                 isActive: true
             }
         });
@@ -89,18 +87,18 @@ export async function GET(req: Request) {
             data: {
                 userId: session.id,
                 accessToken: accessToken,
-                phoneNumberId: "pending_fetch", // המערכת תעדכן את זה בשימוש הראשון
-                wabaId: "pending_fetch",
+                wabaId: fetchedWabaId,
+                phoneNumberId: fetchedPhoneId,
                 isActive: true
             }
         });
     }
 
-    // 6. החזרה לעמוד הוואטסאפ עם הודעת הצלחה
+    // 6. סיום והחזרה לאתר
     return NextResponse.redirect(new URL("/builder/whatsapp?success=true", req.url));
 
   } catch (err: any) {
-    console.error("Callback Error:", err);
+    console.error("Callback Critical Error:", err);
     return NextResponse.redirect(new URL("/builder/whatsapp?error=server_error", req.url));
   }
 }
