@@ -7,7 +7,6 @@ interface PromptContext {
   existingFlow?: FlowJson | null;
   isFreshScan?: boolean;
   integrations?: string[];
-  // התיקון שמונע את השגיאה: הגדרת המבנה של לינקים לתשלום
   paymentLinks?: { paybox?: string; paypal?: string };
   siteLink?: string | null;
 }
@@ -22,12 +21,6 @@ export const generateSystemPrompt = (context: PromptContext): string => {
     timeStyle: 'short'
   });
 
-  const hasCalendar = integrations.includes('GOOGLE_CALENDAR');
-  const hasStripe = integrations.includes('STRIPE');
-  const hasPayBox = integrations.includes('PAYBOX');
-  const hasPayPal = integrations.includes('PAYPAL');
-
-  // המרת ה-JSON הקיים למחרוזת
   const existingFlowStr = existingFlow 
     ? JSON.stringify(existingFlow, null, 2) 
     : "NO FLOW YET.";
@@ -97,7 +90,7 @@ Your mission:
   }
 
   /* ============================================================
-      2) CONVERSATION LOGIC (CLEANED - NO INTERRUPTIONS)
+      2) CONVERSATION LOGIC (החלק המלא שחזר)
   ============================================================ */
   const conversationLogic = `
 ==========================
@@ -143,7 +136,7 @@ After gathering data:
 `;
 
   /* ============================================================
-      3) JSON RULES (THE CRITICAL FIX FOR SMART SKIP & FREEZE)
+      3) JSON RULES
   ============================================================ */
   const jsonRules = `
 ==========================
@@ -191,7 +184,7 @@ You MUST include a final step of type "text" (Summary/Confirmation) to close the
 `;
 
   /* ============================================================
-      4) BUSINESS LOGIC MODULE (FULL ORIGINAL RESTORED)
+      4) BUSINESS LOGIC MODULE
   ============================================================ */
   const businessTypeModule = `
 ==========================
@@ -204,7 +197,7 @@ BUSINESS LOGIC ENGINE
 `;
 
   /* ============================================================
-      5) KNOWLEDGE BLOCK (FULL ORIGINAL RESTORED)
+      5) KNOWLEDGE BLOCK
   ============================================================ */
   const knowledgeBlock = `
 ==========================
@@ -223,7 +216,7 @@ ${existingFlowStr}
 `;
 
   /* ============================================================
-      6) PHASE LOGIC (UPDATED FOR LINEAR FLOW)
+      6) PHASE LOGIC (עם התיקון שמונע הפניה לחיבורים)
   ============================================================ */
   let phaseInstructions = '';
 
@@ -260,6 +253,7 @@ ${existingFlowStr}
         - GENERATE <FLOW_JSON> NOW.
         - **CHECK:** Did you use 'phone', 'name', 'date', 'time'?
         - **CHECK:** Did you add a final 'text' step?
+        - **CRITICAL:** Do NOT output [CONNECT_TRIGGER]. Just say: "התסריט מוכן, אתה מוזמן לנסות אותו בסימולציה למטה."
         `;
         break;
 
@@ -270,6 +264,7 @@ ${existingFlowStr}
         - Use "CURRENT SAVED FLOW" from above.
         - Apply changes.
         - Return the FULL JSON inside <FLOW_JSON>.
+        - **CRITICAL:** Do NOT output [CONNECT_TRIGGER]. Say: "עדכנתי את השינויים, בדוק את הסימולציה."
         `;
         break;
 

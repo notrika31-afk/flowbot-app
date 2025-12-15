@@ -3,9 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth"; 
 
 // ==============================================================================
-// תיקון קריטי לשגיאת Build:
 // הגדרות אלו מונעות מ-Next.js לנסות להריץ את הקוד בזמן הבנייה
-// ומחייבות שימוש בסביבת Node.js יציבה עבור Prisma.
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 // ==============================================================================
@@ -15,25 +13,20 @@ export async function POST(req: Request) {
     // 1. זיהוי המשתמש
     const session = await getUserSession();
     
-    // בדיקה מול .id ולא .userId (כפי שביקשת)
     if (!session?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = session.id; // שומרים במשתנה נוח לשימוש
+    const userId = session.id; 
 
     const body = await req.json();
     const { flow, waba, status } = body;
 
-    if (!waba || !waba.phoneId || !waba.token) {
-      return NextResponse.json({ error: "Missing WhatsApp credentials" }, { status: 400 });
-    }
-
+    // --- שינוי 1: הסרת החסימה הגורפת ---
+    // במקום לזרוק שגיאה אם אין waba, אנחנו נבדוק את זה בהמשך.
     console.log("🚀 Publishing Bot for user:", userId);
 
-    // 2. שמירת/עדכון הבוט (התסריט)
-    
-    // שימוש ב-ownerId לפי הסכמה
+    // 2. שמירת/עדכון הבוט (התסריט) - נשאר ללא שינוי
     let bot = await prisma.bot.findFirst({
         where: { ownerId: userId }
     });
@@ -61,32 +54,63 @@ export async function POST(req: Request) {
         });
     }
 
-    // 3. שמירת חיבור הוואטסאפ (WABA)
-    const existingConnection = await prisma.whatsAppConnection.findFirst({
-        where: { userId: userId, phoneNumberId: waba.phoneId }
-    });
+    // 3. טיפול בחיבור הוואטסאפ (Logic חדש התומך בשני המצבים)
 
-    if (existingConnection) {
+    if (waba && waba.phoneId && waba.token) {
+        // === תרחיש A: קיבלנו פרטים ידנית (כמו קודם) ===
+        // נשמור או נעדכן אותם בדיוק כמו בקוד המקורי
+        
+        const existingConnection = await prisma.whatsAppConnection.findFirst({
+            where: { userId: userId, phoneNumberId: waba.phoneId }
+        });
+
+        if (existingConnection) {
+            await prisma.whatsAppConnection.update({
+                where: { id: existingConnection.id },
+                data: {
+                    wabaId: waba.wabaId,
+                    accessToken: waba.token,
+                    isActive: true,
+                    botId: bot.id 
+                }
+            });
+        } else {
+            await prisma.whatsAppConnection.create({
+                data: {
+                    userId: userId,
+                    phoneNumberId: waba.phoneId,
+                    wabaId: waba.wabaId,
+                    accessToken: waba.token,
+                    isActive: true,
+                    botId: bot.id
+                }
+            });
+        }
+
+    } else {
+        // === תרחיש B: לא קיבלנו פרטים (חיבור אוטומטי/פייסבוק) ===
+        // נחפש אם יש חיבור קיים למשתמש בדאטה-בייס
+        
+        const existingConnection = await prisma.whatsAppConnection.findFirst({
+            where: { userId: userId },
+            orderBy: { updatedAt: 'desc' } // לוקחים את החיבור האחרון שהיה פעיל
+        });
+
+        if (!existingConnection) {
+            // אם אין פרטים ב-Body וגם לא מצאנו כלום בדאטה-בייס -> אז זו שגיאה
+            return NextResponse.json({ error: "No WhatsApp connection found. Please connect with Facebook first." }, { status: 400 });
+        }
+
+        // אם מצאנו חיבור, רק נקשר אותו לבוט החדש/המעודכן
         await prisma.whatsAppConnection.update({
             where: { id: existingConnection.id },
             data: {
-                wabaId: waba.wabaId,
-                accessToken: waba.token,
-                isActive: true,
-                botId: bot.id 
+                botId: bot.id,
+                isActive: true
             }
         });
-    } else {
-        await prisma.whatsAppConnection.create({
-            data: {
-                userId: userId,
-                phoneNumberId: waba.phoneId,
-                wabaId: waba.wabaId,
-                accessToken: waba.token,
-                isActive: true,
-                botId: bot.id
-            }
-        });
+        
+        console.log("🔗 Linked existing connection to bot");
     }
 
     console.log("✅ Bot Published Successfully!");

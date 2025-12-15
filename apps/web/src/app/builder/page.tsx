@@ -22,7 +22,7 @@ import {
   CheckCircle2,
   RefreshCcw,
   Link2,
-  Menu // הוספתי אייקון לתפריט מובייל
+  Menu
 } from "lucide-react";
 
 /* ---------- Types ---------- */
@@ -184,7 +184,7 @@ export default function BuilderPage() {
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [showImproveModal, setShowImproveModal] = useState(false);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // מצב תפריט מובייל
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   /* ---------- Persistence & Re-hydration ---------- */
   useEffect(() => {
@@ -263,23 +263,14 @@ export default function BuilderPage() {
     const text = input.trim();
     if (!text || busy || isScanning) return;
 
-    if (text === "לחבר" || text === "כן, לחבר" || text.includes("לחבר יומן") || text.includes("לחבר תשלום")) {
+    // --- שינוי קריטי: הסרת ההפניה האוטומטית ---
+    // הפניה תתבצע רק אם המשתמש ביקש במפורש
+    if (text === "העבר אותי לחיבורים" || text === "אני רוצה לחבר את הבוט" || text === "לחבר") {
         handleConnectRedirect(text);
         return;
     }
 
-    if (flowReady && (
-        text === "כן" || 
-        text === "כן." || 
-        text === "המשך" || 
-        text === "מאשר" || 
-        text === "מעולה" ||
-        text.includes("להתחבר") ||
-        text.includes("שלב הבא")
-    )) {
-        handleConnectRedirect(text);
-        return;
-    }
+    // --- הסרתי את כל הבלוק של "if (flowReady && ...)" שגרם לזריקה החוצה ---
 
     setInput("");
     const newMsgs = [...msgs, { role: "user", text } as Msg];
@@ -288,7 +279,7 @@ export default function BuilderPage() {
 
     let phaseForRequest: Phase = phase;
     if (flowReady) {
-      phaseForRequest = "edit";
+      phaseForRequest = "edit"; // אם הבוט מוכן, כל הודעה היא בקשת עריכה
     } else {
       phaseForRequest = phase === "intro" ? "build" : phase;
     }
@@ -346,12 +337,12 @@ export default function BuilderPage() {
       const data = await res.json();
       let reply = (data?.reply as string) || "משהו השתבש רגעית.";
 
+      // מניעת הפניה אוטומטית גם אם השרת מחזיר טריגר
       if (reply.includes("[CONNECT_TRIGGER]")) {
           reply = reply.replace("[CONNECT_TRIGGER]", "");
-          setMsgs((m) => [...m, { role: "bot", text: reply }]);
-      } else {
-          setMsgs((m) => [...m, { role: "bot", text: reply }]);
       }
+      
+      setMsgs((m) => [...m, { role: "bot", text: reply }]);
       
       if (data.flow) {
         const flowData = data.flow as Flow;
@@ -359,7 +350,7 @@ export default function BuilderPage() {
         setFlowReady(true);
         localStorage.setItem("flowbot_draft_flow", JSON.stringify(flowData));
 
-        setMsgs((m) => [...m, { role: "bot", text: "יש לי תסריט מוכן! בוא נעשה סימולציה 👇" }]);
+        setMsgs((m) => [...m, { role: "bot", text: "עדכנתי את התסריט! הסימולציה למטה התעדכנה 👇" }]);
 
         if (!simulateMode) {
             setSimulateMode(true);
@@ -367,14 +358,6 @@ export default function BuilderPage() {
                 // גלילה חלקה לסימולציה
                 mainContainerRef.current?.scrollTo({ top: mainContainerRef.current.scrollHeight, behavior: 'smooth' });
             }, 100);
-            
-            setTimeout(() => {
-                setMsgs(prev => [...prev, { 
-                    role: "bot", 
-                    text: "אם הכל כשורה, תגיד לי \"כן\" ואעביר אותך לחיבור המערכות הסופי 🚀" 
-                }]);
-                endRef.current?.scrollIntoView({ behavior: "smooth" });
-            }, 2000); 
         }
       }
 
@@ -415,7 +398,6 @@ export default function BuilderPage() {
    * UI RENDER
    * ======================================================= */
 
-  // קומפוננטת תוכן ה-Sidebar (לשימוש גם בדסקטופ וגם במובייל)
   const SidebarContent = () => (
     <div className="flex flex-col gap-4">
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -440,7 +422,6 @@ export default function BuilderPage() {
                     onClick={() => {
                         setSimulateMode(true);
                         setMobileMenuOpen(false);
-                        // גלילה לסימולציה אחרי שנסגר התפריט
                         setTimeout(() => {
                            mainContainerRef.current?.scrollTo({ top: mainContainerRef.current.scrollHeight, behavior: 'smooth' });
                         }, 300);
@@ -458,11 +439,12 @@ export default function BuilderPage() {
         <div className="space-y-2">
             <SideButton icon={<GraduationCap size={14}/>} onClick={() => { setShowGuideModal(true); setMobileMenuOpen(false); }}>מדריך</SideButton>
             <SideButton icon={<FileStack size={14}/>} onClick={() => { setShowTemplatesModal(true); setMobileMenuOpen(false); }}>תבניות</SideButton>
+            <SideButton icon={<Sparkles size={14}/>} onClick={() => { setShowImproveModal(true); setMobileMenuOpen(false); }}>שיפור אוטומטי</SideButton>
         </div>
         
         {flowReady && (
             <div 
-                onClick={() => handleConnectRedirect("מעבר לחיבורים")}
+                onClick={() => handleConnectRedirect("העבר אותי לחיבורים")}
                 className="mt-4 bg-slate-900 text-white py-3.5 rounded-xl text-center text-sm font-bold shadow-lg shadow-slate-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
                 המשך לחיבורים
@@ -500,7 +482,6 @@ export default function BuilderPage() {
            <Link href="/dashboard" className="hidden md:flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-full text-xs font-bold transition">
              <LayoutGrid size={14} /> דשבורד
            </Link>
-           {/* כפתור תפריט למובייל */}
            <button 
              onClick={() => setMobileMenuOpen(true)}
              className="md:hidden p-2 rounded-lg bg-slate-100 text-slate-700"
@@ -525,7 +506,6 @@ export default function BuilderPage() {
                 initial="hidden" animate="show" variants={fade}
                 className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[50vh] md:min-h-[400px]"
             >
-               {/* Messages List */}
                <div className="flex-1 p-3 md:p-4 space-y-4 md:space-y-5 overflow-y-auto">
                   {msgs.map((m, i) => (
                     <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -559,16 +539,14 @@ export default function BuilderPage() {
                   <div ref={endRef} />
                </div>
 
-               {/* Input Area */}
                <div className="p-3 md:p-4 bg-white border-t border-slate-100 sticky bottom-0 z-10">
                   <div className="relative">
                      <input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && sendMsg()}
-                        placeholder="כתוב כאן..."
+                        placeholder="כתוב כאן... (למשל: שנה את השאלה הראשונה)"
                         disabled={busy || isScanning}
-                        // text-base מונע זום באייפון
                         className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-base md:text-sm rounded-xl pl-12 pr-4 py-3 md:py-3.5 focus:outline-none focus:ring-2 focus:ring-slate-900/10 transition disabled:opacity-50"
                      />
                      <button 
@@ -590,7 +568,7 @@ export default function BuilderPage() {
                      animate={{ opacity: 1, y: 0 }}
                      exit={{ opacity: 0, scale: 0.95 }}
                      transition={{ duration: 0.5, type: "spring" }}
-                     className="scroll-mt-4" // לטובת גלילה
+                     className="scroll-mt-4"
                   >
                      <SimulationBox flow={flow} onClose={() => setSimulateMode(false)} />
                   </motion.div>
@@ -598,7 +576,6 @@ export default function BuilderPage() {
             </AnimatePresence>
           </div>
 
-          {/* Right Column (Desktop) */}
           <aside className="hidden md:flex flex-col gap-4">
              <SidebarContent />
           </aside>
@@ -606,12 +583,10 @@ export default function BuilderPage() {
         </div>
       </div>
 
-      {/* Mobile Menu Sheet */}
       <Sheet show={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} title="תפריט בונה">
         <SidebarContent />
       </Sheet>
 
-      {/* Guide & Templates Modals */}
       <Sheet show={showGuideModal} onClose={() => setShowGuideModal(false)} title="איך זה עובד?">
          <p className="text-sm text-slate-600 leading-relaxed">
            1. ספר לבוט על העסק שלך (שם, תחום, שעות).<br/>
@@ -638,12 +613,19 @@ export default function BuilderPage() {
          </div>
       </Sheet>
 
+      <Sheet show={showImproveModal} onClose={() => setShowImproveModal(false)} title="שיפור אוטומטי">
+        <div className="text-center p-4">
+             <p className="text-sm text-slate-500 mb-4">המערכת תסרוק את התסריט ותציע שיפורים בניסוח ובמכירה.</p>
+             <button onClick={() => { setInput("תציע שיפורים לתסריט הקיים"); setShowImproveModal(false); sendMsg(); }} className="w-full bg-black text-white py-3 rounded-xl font-bold">הפעל שיפור</button>
+        </div>
+      </Sheet>
+
     </div>
   );
 }
 
 /* =========================================================
- * SIMULATION BOX (The "Smart" Local Player)
+ * SIMULATION BOX
  * ======================================================= */
 
 type SimChatMsg = { role: "bot" | "user"; text: string };
@@ -688,19 +670,23 @@ function SimulationBox({ flow, onClose }: { flow: Flow; onClose: () => void }) {
     }, 600);
   }
 
+  // --- לוגיקה חכמה חדשה: דילוג על שאלות אם המידע ידוע ---
   function findNextSmartStep(currentVars: Record<string, string>, startIndex: number): number {
     for (let i = startIndex + 1; i < steps.length; i++) {
         const step = steps[i];
-        if (step.type === 'text') return i;
+        
+        // אם לשלב יש משתנה (כמו name או phone)
         if (step.variable) {
             const varName = step.variable as string;
+            // אם המשתנה כבר קיים בזיכרון, נדלג על השאלה הזו!
             if (currentVars[varName]) {
-                console.log(`Skipping step ${i}, var '${varName}' known.`);
-                continue;
+                continue; 
             }
-            return i;
+            // אם הוא לא קיים, זו השאלה הבאה שצריך לשאול
+            return i; 
         }
-        return i;
+        // שלב טקסט רגיל (בלי משתנה) תמיד מוצג
+        return i; 
     }
     return -1;
   }
@@ -712,24 +698,27 @@ function SimulationBox({ flow, onClose }: { flow: Flow; onClose: () => void }) {
     setChat(prev => [...prev, { role: "user", text }]);
     setUserInput("");
 
+    // עדכון משתנים (זיהוי ישויות)
     const newVars = { ...variables };
     const extracted = extractEntities(text);
     Object.assign(newVars, extracted);
 
+    // שמירת תשובה לשאלה הנוכחית
     const currentStep = steps[currentStepIndex];
     if (currentStep?.variable && !newVars[currentStep.variable]) {
         newVars[currentStep.variable] = text;
     }
 
     setVariables(newVars);
+
+    // חיפוש השלב הבא החכם
     const nextIdx = findNextSmartStep(newVars, currentStepIndex);
-    if (nextIdx === -1) return;
+    if (nextIdx === -1) return; // סוף הבוט
     playStep(steps[nextIdx], nextIdx);
   }
 
   return (
     <div className="mt-4 bg-[#efeae2] border border-slate-300 rounded-2xl md:rounded-3xl overflow-hidden shadow-xl w-full mx-auto relative z-10">
-       {/* Fake WhatsApp Header */}
        <div className="bg-[#075E54] px-4 py-3 flex items-center justify-between text-white shadow-md">
           <div className="flex items-center gap-3">
              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
@@ -743,7 +732,6 @@ function SimulationBox({ flow, onClose }: { flow: Flow; onClose: () => void }) {
           <button onClick={onClose} className="opacity-70 hover:opacity-100 transition p-1"><X size={20}/></button>
        </div>
 
-       {/* Chat Area */}
        <div 
          ref={scrollRef}
          className="h-[350px] md:h-[400px] overflow-y-auto p-4 space-y-3 bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-repeat"
@@ -772,7 +760,6 @@ function SimulationBox({ flow, onClose }: { flow: Flow; onClose: () => void }) {
           )}
        </div>
 
-       {/* Input Area */}
        <div className="bg-[#f0f2f5] p-2 flex gap-2 items-center">
           <input 
              value={userInput}

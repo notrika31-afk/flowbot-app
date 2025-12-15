@@ -2,239 +2,225 @@
 
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { 
   ArrowLeft, 
   ShieldCheck, 
-  Info,
-  ExternalLink,
-  Settings,
-  UserCheck,
-  Lock
+  Facebook, 
+  CheckCircle2,
+  Loader2,
+  Zap,
+  MessageSquare
 } from "lucide-react";
-
-// --- הגדרות ולידציה ---
-const MIN_ID_LENGTH = 10; 
-const MIN_TOKEN_LENGTH = 50; 
 
 export default function WhatsappConnectionPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  
+  // ניהול מצבים לחוויית משתמש עשירה
+  const [status, setStatus] = useState<'IDLE' | 'CONNECTING' | 'PROCESSING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // נתוני הטופס
-  const [formData, setFormData] = useState({
-    phoneId: "",
-    wabaId: "",
-    token: ""
-  });
+  // 1. בדיקה אם חזרנו מפייסבוק בהצלחה
+  useEffect(() => {
+    const success = searchParams?.get("success");
+    const error = searchParams?.get("error");
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    setError(null);
+    if (success === "true") {
+      // חזרנו עם אישור -> מתחילים תהליך פרסום
+      handleAutoPublish();
+    } else if (error) {
+      setStatus('ERROR');
+      setErrorMessage("החיבור בוטל או נכשל מצד פייסבוק.");
+    }
+  }, [searchParams]);
+
+  // פונקציה 1: שליחה לפייסבוק
+  const handleConnectFacebook = () => {
+    setStatus('CONNECTING');
+    setErrorMessage(null);
+
+    const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+    
+    // וודא שהכתובת הזו מוגדרת בדיוק ככה ב-Valid OAuth Redirect URIs בפייסבוק
+    const callbackUrl = `${window.location.origin}/api/auth/facebook/callback`; 
+
+    if (!appId) {
+        setStatus('ERROR');
+        setErrorMessage("שגיאת מערכת: חסר מזהה אפליקציה (App ID).");
+        return;
+    }
+
+    // הפניה לדיאלוג של פייסבוק
+    // scope: ההרשאות שאנחנו מבקשים
+    const targetUrl = `https://www.facebook.com/v22.0/dialog/oauth?client_id=${appId}&redirect_uri=${callbackUrl}&scope=whatsapp_business_management,whatsapp_business_messaging&response_type=code`;
+    
+    window.location.href = targetUrl;
   };
 
-  const handleSaveAndPublish = async () => {
-    setError(null);
-
-    // 1. ולידציה בסיסית
-    if (!formData.phoneId || !formData.wabaId || !formData.token) {
-      setError("נא למלא את כל השדות הנדרשים.");
-      return;
-    }
-    if (formData.phoneId.length < MIN_ID_LENGTH) {
-      setError(`Phone Number ID קצר מדי.`);
-      return;
-    }
-    if (formData.token.length < MIN_TOKEN_LENGTH) {
-      setError(`Permanent Token קצר מדי.`);
-      return;
-    }
-    
-    setIsLoading(true);
+  // פונקציה 2: הפעלת הבוט לאחר החיבור
+  const handleAutoPublish = async () => {
+    setStatus('PROCESSING');
 
     try {
-      // 2. שליפת הבוט מהדפדפן
       const localFlow = localStorage.getItem('flowbot_draft_flow');
       if (!localFlow) {
           throw new Error("לא נמצא בוט שמור בזיכרון. נא לחזור לבילדר.");
       }
 
-      // 3. קריאה לשרת
+      // קריאה לשרת לפרסום הבוט
+      // השרת יזהה שיש למשתמש כבר טוקן שמור (מהשלב הקודם) וישתמש בו
       const res = await fetch('/api/bot/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
               flow: JSON.parse(localFlow),
-              waba: formData,
               status: 'ACTIVE' 
           }),
       });
 
-      // טיפול במשתמש לא מחובר
-      if (res.status === 401) {
-          localStorage.setItem('pending_waba_save', JSON.stringify(formData));
-          router.push('/register?callbackUrl=/builder/whatsapp');
-          return;
-      }
-
       if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || "שגיאה בפרסום הבוט.");
+          throw new Error("שגיאה בפרסום הבוט.");
       }
 
-      // 4. הצלחה
+      // הצלחה מלאה
+      setStatus('SUCCESS');
       localStorage.removeItem('flowbot_draft_flow');
-      localStorage.removeItem('pending_waba_save');
-      
       sessionStorage.setItem("bot_published_success", "true");
       
-      router.push("/builder/publish"); 
+      // מעבר לעמוד הבא אחרי 2 שניות
+      setTimeout(() => {
+          router.push("/builder/publish"); 
+      }, 2000);
 
     } catch (error: any) {
       console.error("Publish Error:", error);
-      setError(error.message || "אירעה שגיאה בחיבור. בדוק את הטוקן ונסה שוב.");
-    } finally {
-      setIsLoading(false);
+      setStatus('ERROR');
+      setErrorMessage("החיבור הצליח, אך הפעלת הבוט נכשלה. נסה שוב.");
     }
   };
 
-  // שחזור נתונים
-  useEffect(() => {
-      const savedWaba = localStorage.getItem('pending_waba_save');
-      if (savedWaba) {
-          try {
-              setFormData(JSON.parse(savedWaba));
-          } catch (e) {}
-      }
-  }, []);
-
   return (
-    // הוספתי overflow-x-hidden למניעת גלילה בגלל הבלובים
-    // הוספתי overflow-y-auto לטובת מובייל
-    <div className="w-full min-h-[90vh] flex items-center justify-center p-4 md:p-6 lg:p-12 overflow-x-hidden" dir="rtl">
+    <div className="w-full min-h-[90vh] flex items-center justify-center p-4 md:p-6 overflow-x-hidden bg-neutral-50/50" dir="rtl">
       
-      <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-20 items-center relative">
+      <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-24 items-center relative">
         
-        {/* --- רקע דקורטיבי --- */}
-        <div className="absolute top-0 left-0 w-[300px] md:w-[500px] h-[300px] md:h-[500px] bg-green-200/30 rounded-full blur-3xl -z-10 mix-blend-multiply animate-pulse" />
+        {/* אלמנט רקע דקורטיבי */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-100/40 rounded-full blur-[100px] -z-10" />
 
-        {/* --- צד ימין: טקסטים --- */}
-        {/* שיניתי את הסדר: order-first במובייל כדי שהכותרת תהיה למעלה */}
-        <div className="lg:col-span-7 flex flex-col gap-6 md:gap-8 text-right order-first">
+        {/* --- צד ימין: הסבר ומכירה --- */}
+        <div className="flex flex-col gap-6 order-2 lg:order-1 text-right">
             <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-white border-2 border-neutral-100 rounded-full shadow-sm mb-4 md:mb-6">
-                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"/>
-                     <span className="text-xs font-bold text-neutral-600 uppercase tracking-wider">שלב אחרון</span>
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-100 rounded-full text-blue-700 font-bold text-xs mb-6">
+                    <Zap size={14} fill="currentColor" />
+                    התקנה מהירה ב-30 שניות
                 </div>
                 
-                {/* התאמת גודל פונט למובייל */}
-                <h1 className="text-4xl md:text-5xl lg:text-7xl font-black tracking-tighter text-neutral-900 mb-4 md:mb-6 leading-[1.1] md:leading-[0.95]">
-                    לחבר ולהפעיל <br/>
-                    <span className="text-transparent bg-clip-text bg-gradient-to-l from-[#25D366] to-[#128C7E]">
-                        את הבוט שלך.
+                <h1 className="text-4xl md:text-5xl font-black text-neutral-900 mb-4 leading-tight">
+                    לחבר את הבוט <br/>
+                    <span className="text-transparent bg-clip-text bg-gradient-to-l from-blue-600 to-blue-400">
+                        בלי להסתבך.
                     </span>
                 </h1>
                 
-                <p className="text-base md:text-xl text-neutral-500 font-medium leading-relaxed max-w-xl ml-auto">
-                    הזינו את פרטי ה-API של Meta.
-                    <br className="hidden md:block"/>
-                    ברגע שתלחצו על הכפתור, הבוט יעלה לאוויר ויהיה זמין ללקוחות שלכם מיד.
+                <p className="text-lg text-neutral-500 leading-relaxed max-w-lg">
+                    הקמנו תהליך אוטומטי חכם. 
+                    במקום להעתיק קודים ולהתעסק עם הגדרות טכניות, פשוט התחברו לחשבון הפייסבוק העסקי שלכם – ואנחנו נעשה את השאר.
                 </p>
             </motion.div>
 
-            {/* הסתרת הוראות במובייל אם רוצים לחסוך מקום, או השארתן. כאן השארתי. */}
-            <HowToConnectSection />
+            <div className="space-y-4 pt-4 border-t border-neutral-200/60">
+                <FeatureItem icon={<ShieldCheck className="text-green-500"/>} text="חיבור רשמי ומאובטח ל-Meta (WhatsApp API)" />
+                <FeatureItem icon={<Zap className="text-amber-500"/>} text="זיהוי אוטומטי של מספר הטלפון העסקי" />
+                <FeatureItem icon={<MessageSquare className="text-purple-500"/>} text="הבוט מתחיל לענות מיד בסיום החיבור" />
+            </div>
         </div>
 
-        {/* --- צד שמאל: הטופס --- */}
+        {/* --- צד שמאל: כרטיס הפעולה --- */}
         <motion.div 
-            className="lg:col-span-5 w-full relative mt-4 lg:mt-0"
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ type: "spring", stiffness: 100, damping: 20 }}
+            className="w-full relative order-1 lg:order-2"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1 }}
         >
-            <div className="absolute -inset-3 bg-neutral-900 rounded-[2.5rem] rotate-2 opacity-5 -z-10" />
-            
-            {/* הקטנת padding במובייל */}
-            <div className="bg-white rounded-[1.5rem] md:rounded-[2rem] border-[4px] border-neutral-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] md:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] p-5 md:p-10 flex flex-col gap-5 md:gap-6 relative overflow-hidden">
+            <div className="bg-white rounded-3xl border border-neutral-200 shadow-xl shadow-neutral-200/40 p-8 md:p-10 flex flex-col items-center text-center relative overflow-hidden">
                 
-                <div className="flex items-center justify-between pb-4 md:pb-6 border-b-2 border-neutral-100">
-                    <div>
-                        <h2 className="text-xl md:text-2xl font-black tracking-tight text-neutral-900">פרטי גישה</h2>
-                        <p className="text-sm text-neutral-400 font-medium">מתוך Meta Developers</p>
-                    </div>
-                    <div className="w-10 h-10 md:w-12 md:h-12 bg-[#F5F5F5] rounded-xl md:rounded-2xl border-2 border-neutral-200 flex items-center justify-center">
-                        <Lock size={20} className="text-neutral-400" />
-                    </div>
-                </div>
-
-                <div className="space-y-4 md:space-y-5">
-                    <InputGroup 
-                        label="Phone Number ID" 
-                        name="phoneId" 
-                        value={formData.phoneId} 
-                        onChange={handleChange}
-                        placeholder="10594..." 
-                    />
-                    <InputGroup 
-                        label="WABA ID" 
-                        name="wabaId" 
-                        value={formData.wabaId} 
-                        onChange={handleChange}
-                        placeholder="10234..." 
-                    />
-                    <InputGroup 
-                        label="Permanent Token" 
-                        name="token" 
-                        value={formData.token} 
-                        onChange={handleChange}
-                        placeholder="EAAG..." 
-                        type="password"
-                        isToken
-                    />
-                </div>
-                
-                {error && (
+                {/* מצב הצלחה */}
+                {status === 'SUCCESS' && (
                     <motion.div 
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="p-3 bg-red-50 border border-red-300 rounded-xl text-sm font-medium text-red-700 text-center"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="absolute inset-0 bg-white z-20 flex flex-col items-center justify-center p-8"
                     >
-                        {error}
+                        <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
+                            <CheckCircle2 size={40} />
+                        </div>
+                        <h3 className="text-2xl font-black text-neutral-900 mb-2">הכל מוכן!</h3>
+                        <p className="text-neutral-500">הבוט מחובר ומפורסם בהצלחה.</p>
+                        <p className="text-sm text-neutral-400 mt-4">מעביר אותך לדשבורד...</p>
                     </motion.div>
                 )}
 
+                {/* אייקון ראשי */}
+                <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6 relative group">
+                    <div className="absolute inset-0 bg-blue-400/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <Facebook size={40} fill="currentColor" className="relative z-10" />
+                </div>
+
+                <h2 className="text-2xl font-bold text-neutral-900 mb-2">
+                    {status === 'PROCESSING' ? 'מגדיר את הבוט...' : 'חיבור ל-WhatsApp'}
+                </h2>
+                
+                <p className="text-neutral-500 text-sm mb-8 px-4">
+                    {status === 'PROCESSING' 
+                        ? 'אנא המתן, אנחנו שומרים את ההגדרות ומעלים את הבוט לאוויר.'
+                        : 'בלחיצה על הכפתור תועבר לאישור מהיר מול פייסבוק.'}
+                </p>
+
+                {/* הודעת שגיאה */}
+                {errorMessage && (
+                    <div className="mb-6 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 w-full font-medium">
+                        {errorMessage}
+                    </div>
+                )}
+
+                {/* הכפתור הראשי */}
                 <button
-                    onClick={handleSaveAndPublish}
-                    disabled={isLoading}
+                    onClick={handleConnectFacebook}
+                    disabled={status === 'CONNECTING' || status === 'PROCESSING'}
                     className={`
-                        group mt-2 md:mt-4 w-full py-3.5 md:py-4 bg-neutral-900 text-white rounded-xl font-bold text-base md:text-lg 
-                        border-[3px] border-transparent hover:border-neutral-900 hover:bg-white hover:text-neutral-900
-                        transition-all duration-200 flex items-center justify-center gap-3 active:scale-[0.98]
-                        ${isLoading ? "opacity-80 cursor-wait" : "shadow-lg active:translate-y-1"}
+                        w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 transition-all
+                        ${status === 'CONNECTING' || status === 'PROCESSING'
+                            ? "bg-neutral-100 text-neutral-400 cursor-not-allowed"
+                            : "bg-[#1877F2] hover:bg-[#166fe5] text-white shadow-lg hover:shadow-blue-500/20 active:scale-[0.98]"
+                        }
                     `}
                 >
-                    {isLoading ? (
-                        "מפעיל את הבוט..."
+                    {status === 'CONNECTING' ? (
+                        <>
+                            <Loader2 className="animate-spin" />
+                            <span>מתחבר...</span>
+                        </>
+                    ) : status === 'PROCESSING' ? (
+                         <>
+                            <Loader2 className="animate-spin" />
+                            <span>מסיים הגדרות...</span>
+                        </>
                     ) : (
                         <>
-                            <span>הפעל בוט עכשיו</span>
-                            <ArrowLeft className="group-hover:-translate-x-1 transition-transform" size={20} />
+                            <Facebook fill="currentColor" size={22} />
+                            <span>התחברות עם Facebook</span>
                         </>
                     )}
                 </button>
-                
-                <div className="text-center">
-                    <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-neutral-400 hover:text-neutral-900 underline decoration-neutral-200 underline-offset-4 flex items-center justify-center gap-1">
-                        איפה מוצאים את הנתונים?
-                        <ExternalLink size={12} />
-                    </a>
-                </div>
+
+                <p className="mt-6 text-xs text-neutral-400 max-w-xs mx-auto">
+                    בכפוף לתנאי השימוש של Meta ו-WhatsApp Business API.
+                </p>
 
             </div>
         </motion.div>
@@ -244,76 +230,14 @@ export default function WhatsappConnectionPage() {
   );
 }
 
-// --- רכיבי עזר ---
-
-function HowToConnectSection() {
+// קומפוננטה קטנה לשורות היתרונות
+function FeatureItem({ icon, text }: { icon: any, text: string }) {
     return (
-        <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2, duration: 0.5 }}
-            className="space-y-4 md:space-y-6"
-        >
-             <h2 className="text-xl md:text-2xl font-black text-neutral-900 border-b border-neutral-200 pb-2">
-                איך מתחברים?
-            </h2>
-            <StepCard 
-                num={1}
-                icon={<Settings className="text-blue-500 w-5 h-5 md:w-6 md:h-6" />}
-                title="הגדרת אפליקציית Meta"
-                desc="בפורטל המפתחים של Meta, צרו אפליקציה והוסיפו את מוצר WhatsApp."
-            />
-            <StepCard 
-                num={2}
-                icon={<UserCheck className="text-purple-500 w-5 h-5 md:w-6 md:h-6" />}
-                title="העתקת פרטים"
-                desc="העתיקו את ה-Phone ID, WABA ID והטוקן מהדשבורד והדביקו כאן."
-            />
-            <StepCard 
-                num={3}
-                icon={<ShieldCheck className="text-green-500 w-5 h-5 md:w-6 md:h-6" />}
-                title="שיגור"
-                desc="לחצו על הכפתור, והמערכת תאמת את החיבור ותעלה את הבוט לאוויר מיד."
-            />
-        </motion.div>
-    );
-}
-
-function StepCard({ num, icon, title, desc }: { num: number, icon: React.ReactNode, title: string, desc: string }) {
-    return (
-        <motion.div 
-            className="flex items-start gap-3 md:gap-4 p-4 md:p-5 bg-white rounded-2xl border border-neutral-200 shadow-md"
-            whileHover={{ scale: 1.01 }}
-        >
-            <div className="flex flex-col items-center shrink-0">
-                <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-neutral-900 text-white flex items-center justify-center font-black text-sm md:text-lg shadow-lg">
-                    {num}
-                </div>
+        <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-neutral-100 shadow-sm">
+            <div className="shrink-0 w-8 h-8 flex items-center justify-center bg-neutral-50 rounded-lg">
+                {icon}
             </div>
-            <div>
-                <h3 className="font-bold text-lg md:text-xl text-neutral-900 flex items-center gap-2 mb-1">{icon} {title}</h3>
-                <p className="text-sm md:text-base text-neutral-600 font-medium leading-relaxed">{desc}</p>
-            </div>
-        </motion.div>
-    );
-}
-
-function InputGroup({ label, name, value, onChange, placeholder, type = "text", isToken = false }: any) {
-    return (
-        <div className="space-y-1.5 md:space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-neutral-500 ml-1">{label}</label>
-            <div className="relative">
-                <input 
-                    name={name}
-                    value={value}
-                    onChange={onChange}
-                    type={type}
-                    dir="ltr"
-                    placeholder={placeholder}
-                    // text-base מונע זום אוטומטי באייפון
-                    className={`w-full bg-neutral-50 border-2 border-neutral-200 rounded-xl px-4 py-3 md:py-3.5 focus:outline-none focus:border-neutral-900 focus:bg-white transition-all font-mono text-base md:text-sm placeholder:text-neutral-300 text-neutral-900 ${isToken ? "tracking-widest" : ""}`}
-                />
-            </div>
+            <span className="text-sm font-bold text-neutral-700">{text}</span>
         </div>
     );
 }
