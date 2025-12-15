@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { 
   Facebook, 
   CheckCircle2,
@@ -15,26 +15,37 @@ import {
 
 export default function WhatsappConnectionPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   
   // ניהול מצבים
   const [status, setStatus] = useState<'IDLE' | 'CONNECTING' | 'PROCESSING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // 1. בדיקה אם חזרנו מפייסבוק בהצלחה
+  // --- האזנה להודעות מהחלון הקופץ (Popup Listener) ---
   useEffect(() => {
-    const success = searchParams?.get("success");
-    const error = searchParams?.get("error");
+    const handleMessage = (event: MessageEvent) => {
+      // אבטחה: מוודאים שההודעה הגיעה מהדומיין שלנו (או מהחלון שפתחנו)
+      // הערה: בגלל redirect של פייסבוק, ה-origin עשוי להשתנות, אז נבדוק את מבנה ההודעה
+      if (event.data && event.data.type === 'FACEBOOK_AUTH_RESULT') {
+          
+          if (event.data.status === 'SUCCESS') {
+              // קיבלנו אישור מהחלון השני!
+              handleAutoPublish();
+          } else {
+              // קיבלנו שגיאה
+              setStatus('ERROR');
+              setErrorMessage(event.data.message || "החיבור נכשל.");
+          }
+      }
+    };
 
-    if (success === "true") {
-      handleAutoPublish();
-    } else if (error) {
-      setStatus('ERROR');
-      setErrorMessage("החיבור בוטל או נכשל מצד פייסבוק.");
-    }
-  }, [searchParams]);
+    window.addEventListener('message', handleMessage);
+    
+    // ניקוי המאזין כשהקומפוננטה יורדת
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
-  // פונקציה 1: שליחה לפייסבוק
+
+  // פונקציה 1: פתיחת חלון פייסבוק (Popup)
   const handleConnectFacebook = () => {
     setStatus('CONNECTING');
     setErrorMessage(null);
@@ -50,7 +61,17 @@ export default function WhatsappConnectionPage() {
 
     const targetUrl = `https://www.facebook.com/v22.0/dialog/oauth?client_id=${appId}&redirect_uri=${callbackUrl}&scope=whatsapp_business_management,whatsapp_business_messaging&response_type=code`;
     
-    window.location.href = targetUrl;
+    // חישוב מרכז המסך לפתיחת החלון (חוויית דסקטופ)
+    const width = 600;
+    const height = 700;
+    const left = typeof window !== 'undefined' ? (window.screen.width / 2) - (width / 2) : 0;
+    const top = typeof window !== 'undefined' ? (window.screen.height / 2) - (height / 2) : 0;
+
+    window.open(
+        targetUrl, 
+        'FacebookLogin', 
+        `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`
+    );
   };
 
   // פונקציה 2: הפעלת הבוט לאחר החיבור
@@ -99,7 +120,7 @@ export default function WhatsappConnectionPage() {
         {/* אלמנט רקע דקורטיבי */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-100/40 rounded-full blur-[100px] -z-10" />
 
-        {/* --- צד ימין: הסבר ומדריך (מעודכן) --- */}
+        {/* --- צד ימין: הסבר ומדריך --- */}
         <div className="flex flex-col gap-6 order-2 lg:order-1 text-right">
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
@@ -119,7 +140,7 @@ export default function WhatsappConnectionPage() {
                 </h1>
                 
                 <p className="text-lg text-neutral-500 leading-relaxed max-w-lg mb-6">
-                    התהליך הוא אוטומטי ובטוח. כדי שהכל יעבוד חלק, הנה 3 הדברים שתתבקשו לעשות בחלון של פייסבוק:
+                    התהליך הוא אוטומטי ובטוח. יפתח חלון קטן של פייסבוק בו תתבקשו לאשר את החיבור.
                 </p>
             </motion.div>
 
@@ -136,20 +157,19 @@ export default function WhatsappConnectionPage() {
                     desc="בחרו את המספר ממנו הבוט ישלח ויקבל הודעות." 
                 />
                 
-                {/* הערה חשובה מודגשת */}
                 <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex gap-3 items-start mt-2">
                     <AlertCircle className="text-amber-500 shrink-0 mt-0.5" size={20} />
                     <div>
                         <span className="block font-bold text-neutral-800 text-sm mb-1">הכי חשוב: הרשאות</span>
                         <p className="text-sm text-neutral-600 leading-relaxed">
-                            בשלב האישור, <span className="font-bold underline decoration-amber-300 decoration-2">אל תורידו את הסימון</span> מהרשאות שפייסבוק מבקש. בלי הרשאות מלאות, הבוט לא יוכל לקרוא הודעות.
+                            בשלב האישור, <span className="font-bold underline decoration-amber-300 decoration-2">אל תורידו את הסימון</span> מהרשאות שפייסבוק מבקש.
                         </p>
                     </div>
                 </div>
             </div>
         </div>
 
-        {/* --- צד שמאל: כרטיס הפעולה (ללא שינוי) --- */}
+        {/* --- צד שמאל: כרטיס הפעולה --- */}
         <motion.div 
             className="w-full relative order-1 lg:order-2"
             initial={{ opacity: 0, scale: 0.95 }}
@@ -184,8 +204,8 @@ export default function WhatsappConnectionPage() {
                 
                 <p className="text-neutral-500 text-sm mb-8 px-4">
                     {status === 'PROCESSING' 
-                        ? 'אנא המתן, אנחנו שומרים את ההגדרות ומעלים את הבוט לאוויר.'
-                        : 'בלחיצה על הכפתור תועבר לאישור מהיר מול פייסבוק.'}
+                        ? 'אנא המתן, המערכת מסיימת את ההגדרות.'
+                        : 'לחצו על הכפתור כדי לפתוח את חלון האישור המאובטח.'}
                 </p>
 
                 {errorMessage && (
@@ -208,7 +228,7 @@ export default function WhatsappConnectionPage() {
                     {status === 'CONNECTING' ? (
                         <>
                             <Loader2 className="animate-spin" />
-                            <span>מתחבר...</span>
+                            <span>פותח חלון...</span>
                         </>
                     ) : status === 'PROCESSING' ? (
                          <>
@@ -235,7 +255,6 @@ export default function WhatsappConnectionPage() {
   );
 }
 
-// קומפוננטה משודרגת לרשימת ההנחיות
 function GuideItem({ icon, title, desc }: { icon: any, title: string, desc: string }) {
     return (
         <div className="flex items-start gap-4 p-4 bg-white rounded-xl border border-neutral-100 shadow-sm hover:border-blue-100 transition-colors">
