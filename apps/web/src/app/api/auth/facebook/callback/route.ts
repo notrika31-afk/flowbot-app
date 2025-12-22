@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
-// השארתי את הייבוא כדי לא לשנות את מבנה הקובץ, למרות שנשתמש בסטרינג ישיר
 import { IntegrationProvider } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -12,8 +11,7 @@ export async function GET(req: Request) {
     const code = searchParams.get("code");
     const error = searchParams.get("error");
 
-    // --- HTML לסגירת החלון (עיצוב נקי) ---
-    // לא נגעתי בזה - נשאר בדיוק כמו ששלחת
+    // --- HTML לסגירת החלון ---
     const generateCloseScript = (status: string, message: string) => `
       <!DOCTYPE html>
       <html dir="rtl">
@@ -41,7 +39,6 @@ export async function GET(req: Request) {
           </div>
 
           <script>
-            // 1. נסיון רגיל (תקשורת ישירה)
             try {
                 if (window.opener) {
                     window.opener.postMessage({ 
@@ -52,8 +49,6 @@ export async function GET(req: Request) {
                 }
             } catch (e) { console.error(e); }
 
-            // 2. המנגנון החדש: כתיבה לתיבת דואר משותפת (LocalStorage)
-            // זה מה שיגרום לאתר שלך להתעדכן גם אם יש חסימות דפדפן
             try {
                 localStorage.setItem('fb_auth_result', JSON.stringify({
                     status: '${status}',
@@ -62,7 +57,6 @@ export async function GET(req: Request) {
                 }));
             } catch (e) { console.error("LocalStorage write failed", e); }
 
-            // 3. סגירת החלון
             setTimeout(() => {
                 window.close();
             }, 1500);
@@ -84,7 +78,7 @@ export async function GET(req: Request) {
       });
     }
 
-    // --- תמיכה במשתני סביבה שונים ---
+    // --- הגדרות ---
     const appId = process.env.FACEBOOK_APP_ID || process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
     const appSecret = process.env.FACEBOOK_APP_SECRET;
     
@@ -96,8 +90,6 @@ export async function GET(req: Request) {
     }
 
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://flowbot-app.vercel.app"}/api/auth/facebook/callback`;
-
-    // --- שימוש בגרסת API יציבה (v19.0) ---
     const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${redirectUri}&client_secret=${appSecret}&code=${code}`;
 
     const tokenRes = await fetch(tokenUrl);
@@ -134,13 +126,13 @@ export async function GET(req: Request) {
         console.warn("Could not fetch extra FB details, continuing anyway...");
     }
 
-    // --- שמירה לדאטה בייס (IntegrationConnection) ---
-    // השינוי היחיד נמצא כאן: שימוש ב-"FACEBOOK" as any
+    // --- שמירה לדאטה בייס ---
     await prisma.integrationConnection.upsert({
         where: {
             userId_provider: {
                 userId: session.id,
-                provider: "FACEBOOK" as any // תיקון: עוקף את השגיאה
+                // תיקון: שימוש באובייקט ה-Enum עם Cast ל-any כדי למנוע שגיאות TS ו-Runtime
+                provider: (IntegrationProvider as any).FACEBOOK 
             }
         },
         update: {
@@ -155,7 +147,8 @@ export async function GET(req: Request) {
         },
         create: {
             userId: session.id,
-            provider: "FACEBOOK" as any, // תיקון: עוקף את השגיאה
+            // תיקון: כנ"ל כאן
+            provider: (IntegrationProvider as any).FACEBOOK,
             status: "CONNECTED",
             accessToken: accessToken,
             metadata: {
@@ -167,9 +160,7 @@ export async function GET(req: Request) {
         }
     });
 
-    // ==============================================================================
-    // תוספת חיונית: יצירת WabaConnection כדי שהבוט יזהה את המספר המחובר
-    // ==============================================================================
+    // --- יצירת WabaConnection ---
     if (fetchedWabaId && fetchedPhoneId) {
         await prisma.wabaConnection.upsert({
             where: { 
@@ -193,9 +184,7 @@ export async function GET(req: Request) {
         });
         console.log("✅ WabaConnection linked successfully for:", fetchedPhoneId);
     }
-    // ==============================================================================
 
-    // --- סיום מוצלח ---
     return new NextResponse(generateCloseScript('SUCCESS', 'הפייסבוק חובר בהצלחה!'), { 
         headers: { 'Content-Type': 'text/html; charset=utf-8' } 
     });
@@ -203,7 +192,7 @@ export async function GET(req: Request) {
   } catch (err: any) {
     console.error("Callback Critical Error:", err);
     return new NextResponse(
-        `<html><body><h1>שגיאת שרת</h1><p>נא לבדוק את הלוגים ב-Vercel.</p><script>window.close();</script></body></html>`, 
+        `<html><body><h1>שגיאת שרת</h1><p>נא לבדוק את הלוגים.</p><script>window.close();</script></body></html>`, 
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
     );
   }
