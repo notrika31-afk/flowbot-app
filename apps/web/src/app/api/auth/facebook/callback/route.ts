@@ -11,6 +11,7 @@ export async function GET(req: Request) {
     const error = searchParams.get("error");
 
     // --- HTML לסגירת החלון (עיצוב נקי) ---
+    // שינוי: הוספתי כאן את הכתיבה ל-localStorage כדי שהאתר הראשי יקלוט את זה מיד
     const generateCloseScript = (status: string, message: string) => `
       <!DOCTYPE html>
       <html dir="rtl">
@@ -38,17 +39,31 @@ export async function GET(req: Request) {
           </div>
 
           <script>
-            if (window.opener) {
-                window.opener.postMessage({ 
-                    type: 'FACEBOOK_AUTH_RESULT', 
-                    status: '${status}', 
-                    message: '${message}' 
-                }, '*');
-                
-                if ('${status}' === 'SUCCESS') {
-                    setTimeout(() => { window.close(); }, 1500);
+            // 1. נסיון רגיל (תקשורת ישירה)
+            try {
+                if (window.opener) {
+                    window.opener.postMessage({ 
+                        type: 'FACEBOOK_AUTH_RESULT', 
+                        status: '${status}', 
+                        message: '${message}' 
+                    }, '*');
                 }
-            }
+            } catch (e) { console.error(e); }
+
+            // 2. המנגנון החדש: כתיבה לתיבת דואר משותפת (LocalStorage)
+            // זה מה שיגרום לאתר שלך להתעדכן גם אם יש חסימות דפדפן
+            try {
+                localStorage.setItem('fb_auth_result', JSON.stringify({
+                    status: '${status}',
+                    message: '${message}',
+                    timestamp: Date.now()
+                }));
+            } catch (e) { console.error("LocalStorage write failed", e); }
+
+            // 3. סגירת החלון
+            setTimeout(() => {
+                window.close();
+            }, 1500);
           </script>
         </body>
       </html>
@@ -67,7 +82,7 @@ export async function GET(req: Request) {
       });
     }
 
-    // --- תיקון 1: תמיכה במשתני סביבה שונים ---
+    // --- תמיכה במשתני סביבה שונים ---
     const appId = process.env.FACEBOOK_APP_ID || process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
     const appSecret = process.env.FACEBOOK_APP_SECRET;
     
@@ -80,7 +95,7 @@ export async function GET(req: Request) {
 
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://flowbot-app.vercel.app"}/api/auth/facebook/callback`;
 
-    // --- תיקון 2: שימוש בגרסת API יציבה (v19.0) ---
+    // --- שימוש בגרסת API יציבה (v19.0) ---
     const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${redirectUri}&client_secret=${appSecret}&code=${code}`;
 
     const tokenRes = await fetch(tokenUrl);
@@ -95,8 +110,7 @@ export async function GET(req: Request) {
 
     const accessToken = tokenData.access_token;
 
-    // --- שליפת פרטים (אופציונלי - לצורך שמירת השם) ---
-    // כאן אנחנו מנסים לשלוף את ה-WABA ID, אבל לא נכשל אם לא נצליח
+    // --- שליפת פרטים ---
     let fetchedWabaId = null;
     let fetchedPhoneId = null;
     let extraMetadata = {};
@@ -118,20 +132,17 @@ export async function GET(req: Request) {
         console.warn("Could not fetch extra FB details, continuing anyway...");
     }
 
-    // --- תיקון 3: שימוש בטבלה הראשית (IntegrationConnection) ---
-    // זה מבטיח שלא נקרוס בגלל שם טבלה לא נכון
+    // --- שמירה לדאטה בייס (IntegrationConnection) ---
     await prisma.integrationConnection.upsert({
         where: {
             userId_provider: {
                 userId: session.id,
-                provider: "FACEBOOK" // או INSTAGRAM אם תרצה להפריד
+                provider: "FACEBOOK"
             }
         },
         update: {
             status: "CONNECTED",
             accessToken: accessToken,
-            // את ה-WABA ID וה-Phone ID אנחנו שומרים בתוך ה-Metadata
-            // כי בטבלה הראשית אין עמודות כאלה בדרך כלל
             metadata: {
                 ...extraMetadata,
                 wabaId: fetchedWabaId,
