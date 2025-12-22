@@ -48,43 +48,48 @@ enum UserPlan {
 // ---------------------------------------------------------
 // 🤖 טבלת בוטים
 // ---------------------------------------------------------
+// ---------------------------------------------------------
+// 🤖 טבלת הבוט (Bot) - מעודכנת עם flowData ו-publishedAt
+// ---------------------------------------------------------
 model Bot {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
   description String?
   ownerId     String
-  isActive    Boolean @default(true)
+  isActive    Boolean  @default(true)
 
   // === הגדרות AI ===
-  systemPrompt String? @db.Text // ההוראה הראשית ל-AI
+  systemPrompt String? @db.Text
   aiModel      String  @default("gpt-4-turbo")
   temperature  Float   @default(0.7)
 
-  // === שדה סטטוס ===
-  status String @default("DRAFT")
+  // === שדה סטטוס וזרימה (התיקון) ===
+  status      String    @default("DRAFT")
+  publishedAt DateTime? // תאריך פרסום אחרון
+  flowData    Json?     // שומר את ה-JSON המלא של ה-Steps
 
-  webhookUrl String? @unique
+  webhookUrl  String?   @unique
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   // רכיבי הבוט
-  flows    Flow[]
-  messages Message[]
-  contacts Contact[]
-  sessions ConversationSession[]
+  flows       Flow[]
+  messages    Message[]
+  contacts    Contact[]
+  sessions    ConversationSession[]
 
   // מאגר ידע
   knowledgeSources KnowledgeSource[]
 
   // חיבורים
-  wabaConnection WabaConnection?
-  hostedNumber   HostedNumber?
+  wabaConnection   WabaConnection?
+  hostedNumber     HostedNumber?
 
-  // 🔗 אינטגרציות מחוברות לבוט הזה
-  integrations   IntegrationConnection[]
+  // אינטגרציות
+  integrations     IntegrationConnection[]
 
   @@index([ownerId])
 }
@@ -93,10 +98,10 @@ model Bot {
 // 🧠 טבלת מקורות ידע (Knowledge Base)
 // ---------------------------------------------------------
 model KnowledgeSource {
-  id    String @id @default(cuid())
-  botId String
-  type  String // FILE, URL, TEXT
-  name  String // שם הקובץ או הכותרת
+  id      String @id @default(cuid())
+  botId   String
+  type    String // FILE, URL, TEXT
+  name    String // שם הקובץ או הכותרת
 
   // תוכן ומיקום
   content   String? @db.Text
@@ -143,7 +148,6 @@ model Flow {
 
   @@index([botId])
 }
-
 // ---------------------------------------------------------
 // 👥 אנשי קשר / לידים
 // ---------------------------------------------------------
