@@ -10,8 +10,7 @@ export async function GET(req: Request) {
     const code = searchParams.get("code");
     const error = searchParams.get("error");
 
-    // פונקציית עזר ליצירת דף ה-HTML שיסגור את החלון
-    // כולל תמיכה למובייל (אם החלון לא נסגר לבד)
+    // --- HTML לסגירת החלון (עיצוב נקי) ---
     const generateCloseScript = (status: string, message: string) => `
       <!DOCTYPE html>
       <html dir="rtl">
@@ -25,20 +24,20 @@ export async function GET(req: Request) {
                 h1 { color: #10b981; margin-bottom: 10px; }
                 p { color: #6b7280; margin-bottom: 20px; }
                 .btn { background: #1877F2; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 16px; text-decoration: none; }
+                .error { color: #ef4444; }
             </style>
         </head>
         <body>
           <div class="card">
              ${status === 'SUCCESS' 
                 ? '<h1>✅ החיבור הצליח!</h1><p>החלון אמור להיסגר אוטומטית.</p>' 
-                : '<h1>❌ שגיאה</h1><p>' + message + '</p>'}
+                : '<h1 class="error">❌ שגיאה</h1><p>' + message + '</p>'}
              
              <p style="font-size: 12px; margin-top: 20px;">אם החלון לא נסגר, אתם יכולים לחזור לאפליקציה.</p>
              <button class="btn" onclick="window.close()">סגור חלון</button>
           </div>
 
           <script>
-            // שליחת הודעה לחלון האב (האתר הראשי)
             if (window.opener) {
                 window.opener.postMessage({ 
                     type: 'FACEBOOK_AUTH_RESULT', 
@@ -46,10 +45,9 @@ export async function GET(req: Request) {
                     message: '${message}' 
                 }, '*');
                 
-                // ניסיון סגירה אוטומטי
-                setTimeout(() => {
-                    window.close();
-                }, 1000);
+                if ('${status}' === 'SUCCESS') {
+                    setTimeout(() => { window.close(); }, 1500);
+                }
             }
           </script>
         </body>
@@ -57,92 +55,113 @@ export async function GET(req: Request) {
     `;
 
     if (error || !code) {
-      return new NextResponse(generateCloseScript('ERROR', 'החיבור בוטל או נכשל.'), { 
+      return new NextResponse(generateCloseScript('ERROR', 'החיבור בוטל או נכשל מצד פייסבוק.'), { 
         headers: { 'Content-Type': 'text/html; charset=utf-8' } 
       });
     }
 
     const session = await getUserSession();
     if (!session?.id) {
-       return new NextResponse(generateCloseScript('ERROR', 'המשתמש לא מחובר.'), { 
+       return new NextResponse(generateCloseScript('ERROR', 'משתמש לא מחובר במערכת.'), { 
         headers: { 'Content-Type': 'text/html; charset=utf-8' } 
       });
     }
 
-    // --- החלפת טוקן ---
-    const appId = process.env.FACEBOOK_APP_ID;
+    // --- תיקון 1: תמיכה במשתני סביבה שונים ---
+    const appId = process.env.FACEBOOK_APP_ID || process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
     const appSecret = process.env.FACEBOOK_APP_SECRET;
+    
+    if (!appId || !appSecret) {
+        console.error("Missing Facebook Keys");
+        return new NextResponse(generateCloseScript('ERROR', 'שגיאת הגדרות שרת (Missing Keys).'), { 
+            headers: { 'Content-Type': 'text/html; charset=utf-8' } 
+        });
+    }
+
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://flowbot-app.vercel.app"}/api/auth/facebook/callback`;
 
-    const tokenUrl = `https://graph.facebook.com/v22.0/oauth/access_token?client_id=${appId}&redirect_uri=${redirectUri}&client_secret=${appSecret}&code=${code}`;
+    // --- תיקון 2: שימוש בגרסת API יציבה (v19.0) ---
+    const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${redirectUri}&client_secret=${appSecret}&code=${code}`;
 
     const tokenRes = await fetch(tokenUrl);
     const tokenData = await tokenRes.json();
 
     if (tokenData.error) {
       console.error("Token Exchange Failed:", tokenData.error);
-      return new NextResponse(generateCloseScript('ERROR', 'כשל בהחלפת הטוקן.'), { 
+      return new NextResponse(generateCloseScript('ERROR', 'כשל בהחלפת הטוקן מול פייסבוק.'), { 
         headers: { 'Content-Type': 'text/html; charset=utf-8' } 
       });
     }
 
     const accessToken = tokenData.access_token;
 
-    // --- שליפת פרטים ---
-    const detailsUrl = `https://graph.facebook.com/v22.0/me?fields=id,name,accounts{name,phone_numbers{id,display_phone_number}}&access_token=${accessToken}`;
-    const detailsRes = await fetch(detailsUrl);
-    const detailsData = await detailsRes.json();
-
-    let fetchedPhoneId = "pending_manual_selection";
-    let fetchedWabaId = "pending_manual_selection";
+    // --- שליפת פרטים (אופציונלי - לצורך שמירת השם) ---
+    // כאן אנחנו מנסים לשלוף את ה-WABA ID, אבל לא נכשל אם לא נצליח
+    let fetchedWabaId = null;
+    let fetchedPhoneId = null;
+    let extraMetadata = {};
 
     try {
-        if (detailsData.accounts && detailsData.accounts.data && detailsData.accounts.data.length > 0) {
-            const firstAccount = detailsData.accounts.data[0];
-            fetchedWabaId = firstAccount.id;
+        const detailsUrl = `https://graph.facebook.com/v19.0/me?fields=id,name,accounts{name,phone_numbers{id,display_phone_number}}&access_token=${accessToken}`;
+        const detailsRes = await fetch(detailsUrl);
+        const detailsData = await detailsRes.json();
 
-            if (firstAccount.phone_numbers && firstAccount.phone_numbers.data && firstAccount.phone_numbers.data.length > 0) {
-                fetchedPhoneId = firstAccount.phone_numbers.data[0].id;
+        if (detailsData.accounts?.data?.[0]) {
+            const account = detailsData.accounts.data[0];
+            fetchedWabaId = account.id;
+            if (account.phone_numbers?.data?.[0]) {
+                fetchedPhoneId = account.phone_numbers.data[0].id;
             }
         }
+        extraMetadata = { facebookDetails: detailsData };
     } catch (e) {
-        console.warn("Auto-fetch warning:", e);
+        console.warn("Could not fetch extra FB details, continuing anyway...");
     }
 
-    // --- שמירה לדאטה-בייס ---
-    const existingConnection = await prisma.whatsAppConnection.findFirst({
-        where: { userId: session.id }
+    // --- תיקון 3: שימוש בטבלה הראשית (IntegrationConnection) ---
+    // זה מבטיח שלא נקרוס בגלל שם טבלה לא נכון
+    await prisma.integrationConnection.upsert({
+        where: {
+            userId_provider: {
+                userId: session.id,
+                provider: "FACEBOOK" // או INSTAGRAM אם תרצה להפריד
+            }
+        },
+        update: {
+            status: "CONNECTED",
+            accessToken: accessToken,
+            // את ה-WABA ID וה-Phone ID אנחנו שומרים בתוך ה-Metadata
+            // כי בטבלה הראשית אין עמודות כאלה בדרך כלל
+            metadata: {
+                ...extraMetadata,
+                wabaId: fetchedWabaId,
+                phoneNumberId: fetchedPhoneId,
+                updatedAt: new Date().toISOString()
+            }
+        },
+        create: {
+            userId: session.id,
+            provider: "FACEBOOK",
+            status: "CONNECTED",
+            accessToken: accessToken,
+            metadata: {
+                ...extraMetadata,
+                wabaId: fetchedWabaId,
+                phoneNumberId: fetchedPhoneId,
+                createdAt: new Date().toISOString()
+            }
+        }
     });
 
-    const dataToSave = {
-        userId: session.id,
-        accessToken: accessToken,
-        wabaId: fetchedWabaId,
-        phoneNumberId: fetchedPhoneId,
-        isActive: true
-    };
-
-    if (existingConnection) {
-        await prisma.whatsAppConnection.update({
-            where: { id: existingConnection.id },
-            data: dataToSave
-        });
-    } else {
-        await prisma.whatsAppConnection.create({
-            data: dataToSave
-        });
-    }
-
     // --- סיום מוצלח ---
-    return new NextResponse(generateCloseScript('SUCCESS', 'מחובר בהצלחה'), { 
+    return new NextResponse(generateCloseScript('SUCCESS', 'הפייסבוק חובר בהצלחה!'), { 
         headers: { 'Content-Type': 'text/html; charset=utf-8' } 
     });
 
   } catch (err: any) {
     console.error("Callback Critical Error:", err);
-    // במקרה קריסה, מחזירים HTML של שגיאה במקום סתם JSON
     return new NextResponse(
-        `<html><body><script>window.opener.postMessage({ type: 'FACEBOOK_AUTH_RESULT', status: 'ERROR', message: 'Server Error' }, '*'); window.close();</script><h1>שגיאת שרת</h1></body></html>`, 
+        `<html><body><h1>שגיאת שרת</h1><p>נא לבדוק את הלוגים ב-Vercel.</p><script>window.close();</script></body></html>`, 
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
     );
   }
