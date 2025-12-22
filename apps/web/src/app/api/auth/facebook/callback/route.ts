@@ -168,6 +168,34 @@ export async function GET(req: Request) {
         }
     });
 
+    // ==============================================================================
+    // תוספת חיונית: יצירת WabaConnection כדי שהבוט יזהה את המספר המחובר
+    // ==============================================================================
+    if (fetchedWabaId && fetchedPhoneId) {
+        await prisma.wabaConnection.upsert({
+            where: { 
+                phoneNumberId: fetchedPhoneId 
+            },
+            update: {
+                userId: session.id,
+                wabaId: fetchedWabaId,
+                accessToken: accessToken,
+                isActive: true,
+                updatedAt: new Date()
+            },
+            create: {
+                userId: session.id,
+                phoneNumberId: fetchedPhoneId,
+                wabaId: fetchedWabaId,
+                accessToken: accessToken,
+                name: "WhatsApp Bot",
+                isActive: true
+            }
+        });
+        console.log("✅ WabaConnection linked successfully for:", fetchedPhoneId);
+    }
+    // ==============================================================================
+
     // --- סיום מוצלח ---
     return new NextResponse(generateCloseScript('SUCCESS', 'הפייסבוק חובר בהצלחה!'), { 
         headers: { 'Content-Type': 'text/html; charset=utf-8' } 
