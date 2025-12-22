@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
-import { IntegrationProvider } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +30,7 @@ export async function GET(req: Request) {
         <body>
           <div class="card">
              ${status === 'SUCCESS' 
-                ? '<h1>✅ החיבור הצליח!</h1><p>החלון אמור להיסגר אוטומטית.</p>' 
+                ? '<h1>✅ החיבור הצליח!</h1><p>הנתונים נשמרו.</p>' 
                 : '<h1 class="error">❌ שגיאה</h1><p>' + message + '</p>'}
              
              <p style="font-size: 12px; margin-top: 20px;">אם החלון לא נסגר, אתם יכולים לחזור לאפליקציה.</p>
@@ -78,12 +77,10 @@ export async function GET(req: Request) {
       });
     }
 
-    // --- הגדרות ---
     const appId = process.env.FACEBOOK_APP_ID || process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
     const appSecret = process.env.FACEBOOK_APP_SECRET;
     
     if (!appId || !appSecret) {
-        console.error("Missing Facebook Keys");
         return new NextResponse(generateCloseScript('ERROR', 'שגיאת הגדרות שרת (Missing Keys).'), { 
             headers: { 'Content-Type': 'text/html; charset=utf-8' } 
         });
@@ -97,7 +94,7 @@ export async function GET(req: Request) {
 
     if (tokenData.error) {
       console.error("Token Exchange Failed:", tokenData.error);
-      return new NextResponse(generateCloseScript('ERROR', 'כשל בהחלפת הטוקן מול פייסבוק.'), { 
+      return new NextResponse(generateCloseScript('ERROR', 'כשל בהחלפת הטוקן.'), { 
         headers: { 'Content-Type': 'text/html; charset=utf-8' } 
       });
     }
@@ -107,6 +104,7 @@ export async function GET(req: Request) {
     // --- שליפת פרטים ---
     let fetchedWabaId = null;
     let fetchedPhoneId = null;
+    let fetchedPhoneName = null;
     let extraMetadata = {};
 
     try {
@@ -119,6 +117,7 @@ export async function GET(req: Request) {
             fetchedWabaId = account.id;
             if (account.phone_numbers?.data?.[0]) {
                 fetchedPhoneId = account.phone_numbers.data[0].id;
+                fetchedPhoneName = account.phone_numbers.data[0].display_phone_number;
             }
         }
         extraMetadata = { facebookDetails: detailsData };
@@ -126,62 +125,88 @@ export async function GET(req: Request) {
         console.warn("Could not fetch extra FB details, continuing anyway...");
     }
 
-    // --- שמירה לדאטה בייס ---
-    await prisma.integrationConnection.upsert({
+    // ==============================================================================
+    // 🛠️ פתרון עוקף: Manual Check & Update (במקום Upsert)
+    // ==============================================================================
+    
+    // 1. נגדיר את הפרוביידר כסטרינג כדי למנוע בעיות ייבוא
+    const FB_PROVIDER = "FACEBOOK"; 
+
+    // 2. נחפש אם קיים חיבור
+    // שימוש ב-findFirst כדי למנוע התנגשות עם מפתחות מורכבים
+    const existingConnection = await prisma.integrationConnection.findFirst({
         where: {
-            userId_provider: {
-                userId: session.id,
-                // תיקון: שימוש באובייקט ה-Enum עם Cast ל-any כדי למנוע שגיאות TS ו-Runtime
-                provider: (IntegrationProvider as any).FACEBOOK 
-            }
-        },
-        update: {
-            status: "CONNECTED",
-            accessToken: accessToken,
-            metadata: {
-                ...extraMetadata,
-                wabaId: fetchedWabaId,
-                phoneNumberId: fetchedPhoneId,
-                updatedAt: new Date().toISOString()
-            }
-        },
-        create: {
             userId: session.id,
-            // תיקון: כנ"ל כאן
-            provider: (IntegrationProvider as any).FACEBOOK,
-            status: "CONNECTED",
-            accessToken: accessToken,
-            metadata: {
-                ...extraMetadata,
-                wabaId: fetchedWabaId,
-                phoneNumberId: fetchedPhoneId,
-                createdAt: new Date().toISOString()
-            }
+            provider: FB_PROVIDER as any // Force string type
         }
     });
 
-    // --- יצירת WabaConnection ---
-    if (fetchedWabaId && fetchedPhoneId) {
-        await prisma.wabaConnection.upsert({
-            where: { 
-                phoneNumberId: fetchedPhoneId 
-            },
-            update: {
-                userId: session.id,
-                wabaId: fetchedWabaId,
+    if (existingConnection) {
+        // === UPDATE ===
+        await prisma.integrationConnection.update({
+            where: { id: existingConnection.id },
+            data: {
+                status: "CONNECTED",
                 accessToken: accessToken,
-                isActive: true,
-                updatedAt: new Date()
-            },
-            create: {
-                userId: session.id,
-                phoneNumberId: fetchedPhoneId,
-                wabaId: fetchedWabaId,
-                accessToken: accessToken,
-                name: "WhatsApp Bot",
-                isActive: true
+                metadata: {
+                    ...extraMetadata,
+                    wabaId: fetchedWabaId,
+                    phoneNumberId: fetchedPhoneId,
+                    updatedAt: new Date().toISOString()
+                }
             }
         });
+    } else {
+        // === CREATE ===
+        await prisma.integrationConnection.create({
+            data: {
+                userId: session.id,
+                provider: FB_PROVIDER as any, // Force string type
+                status: "CONNECTED",
+                accessToken: accessToken,
+                metadata: {
+                    ...extraMetadata,
+                    wabaId: fetchedWabaId,
+                    phoneNumberId: fetchedPhoneId,
+                    createdAt: new Date().toISOString()
+                }
+            }
+        });
+    }
+
+    // ==============================================================================
+    // טיפול ב-WabaConnection (חובה כדי שהבוט יזהה את המספר)
+    // ==============================================================================
+    if (fetchedWabaId && fetchedPhoneId) {
+        
+        // גם כאן, שיטת פיצול כדי להיות בטוחים
+        const existingWaba = await prisma.wabaConnection.findUnique({
+             where: { phoneNumberId: fetchedPhoneId }
+        });
+
+        if (existingWaba) {
+            await prisma.wabaConnection.update({
+                where: { id: existingWaba.id },
+                data: {
+                    userId: session.id,
+                    wabaId: fetchedWabaId,
+                    accessToken: accessToken,
+                    isActive: true,
+                    updatedAt: new Date()
+                }
+            });
+        } else {
+            await prisma.wabaConnection.create({
+                data: {
+                    userId: session.id,
+                    phoneNumberId: fetchedPhoneId,
+                    wabaId: fetchedWabaId,
+                    accessToken: accessToken,
+                    name: fetchedPhoneName || "My WhatsApp Bot",
+                    isActive: true
+                }
+            });
+        }
         console.log("✅ WabaConnection linked successfully for:", fetchedPhoneId);
     }
 
