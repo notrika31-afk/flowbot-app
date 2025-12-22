@@ -10,7 +10,8 @@ import {
   Zap,
   MousePointerClick,
   CheckSquare,
-  AlertCircle
+  AlertCircle,
+  RefreshCw // הוספתי אייקון לכפתור רענון
 } from "lucide-react";
 
 export default function WhatsappConnectionPage() {
@@ -19,42 +20,54 @@ export default function WhatsappConnectionPage() {
   // ניהול מצבים
   const [status, setStatus] = useState<'IDLE' | 'CONNECTING' | 'PROCESSING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showManualCheck, setShowManualCheck] = useState(false); // מצב לכפתור החילוץ
 
-  // --- האזנה להודעות מהחלון הקופץ (Popup Listener) ---
+  // ניקוי שאריות בכניסה לדף
   useEffect(() => {
-    // פונקציה שמקשיבה להודעות מהחלון השני
+      localStorage.removeItem('fb_auth_result');
+  }, []);
+
+  // --- מנגנון 1: האזנה להודעות (PostMessage) ---
+  useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // אנחנו מקשיבים לכל הודעה, אבל מטפלים רק בשלנו
       if (event.data && event.data.type === 'FACEBOOK_AUTH_RESULT') {
-          console.log("Received Message:", event.data);
-          
           if (event.data.status === 'SUCCESS') {
-              // ההתחברות הצליחה! עוברים לשלב הבא אוטומטית
               handleAutoPublish();
           } else {
-              // ההתחברות נכשלה
               setStatus('ERROR');
               setErrorMessage(event.data.message || "החיבור נכשל.");
           }
       }
     };
-
-    // הפעלת ההאזנה
     window.addEventListener('message', handleMessage);
-    
-    // ניקוי המאזין כשהקומפוננטה יורדת כדי למנוע כפילויות
     return () => window.removeEventListener('message', handleMessage);
   }, []);
+
+  // --- מנגנון 2: זיהוי חזרה לחלון (Focus) ---
+  useEffect(() => {
+    const onFocus = () => {
+        // אם המשתמש חזר לחלון והסטטוס עדיין "מתחבר", נבדוק אם סיים
+        if (status === 'CONNECTING') {
+            handleAutoPublish();
+        }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [status]);
 
   // פונקציה 1: פתיחת חלון פייסבוק (Popup)
   const handleConnectFacebook = () => {
     setStatus('CONNECTING');
     setErrorMessage(null);
+    setShowManualCheck(false);
 
-    // נשתמש ב-Client ID הרגיל אם קיים, אחרת ב-Public
+    // הצגת כפתור חילוץ אם לוקח יותר מדי זמן
+    setTimeout(() => setShowManualCheck(true), 5000);
+
+    // ניקוי לפני התחלה
+    localStorage.removeItem('fb_auth_result');
+
     const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
-    
-    // חשוב: כתובת ה-Callback חייבת להיות זהה למה שהגדרת בשרת
     const callbackUrl = `${window.location.origin}/api/auth/facebook/callback`; 
 
     if (!appId) {
@@ -63,65 +76,72 @@ export default function WhatsappConnectionPage() {
         return;
     }
 
-    // משתמשים בגרסה v19.0 היציבה
     const targetUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${callbackUrl}&scope=whatsapp_business_management,whatsapp_business_messaging,email,public_profile&response_type=code`;
     
-    // חישוב מרכז המסך
     const width = 600;
     const height = 700;
     const left = typeof window !== 'undefined' ? (window.screen.width / 2) - (width / 2) : 0;
     const top = typeof window !== 'undefined' ? (window.screen.height / 2) - (height / 2) : 0;
 
-    // פתיחת החלון ושמירת הרפרנס שלו
     const popup = window.open(
         targetUrl, 
         'FacebookLogin', 
         `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`
     );
 
-    // גיבוי: בדיקה ידנית אם החלון נסגר (למקרה שה-postMessage נכשל)
-    const checkPopup = setInterval(() => {
-        if (!popup || popup.closed) {
-            clearInterval(checkPopup);
-            // אם החלון נסגר והסטטוס עדיין "מתחבר", כנראה המשתמש סגר אותו ידנית
-            if (status === 'CONNECTING') {
-                // אופציונלי: אפשר לרענן את העמוד כאן כדי לבדוק אם בכל זאת התחבר
-                // אבל כרגע נשאיר את זה פתוח לניסיון חוזר
-                setStatus('IDLE'); 
+    // --- המנגנון החדש: בדיקה מחזורית (Polling) ---
+    const checkInterval = setInterval(() => {
+        // 1. בדיקה בתיבת הדואר (LocalStorage) - הדרך הכי אמינה
+        const storedResult = localStorage.getItem('fb_auth_result');
+        if (storedResult) {
+            clearInterval(checkInterval);
+            if (popup && !popup.closed) popup.close(); // סגירה יזומה
+            
+            const result = JSON.parse(storedResult);
+            if (result.status === 'SUCCESS') {
+                handleAutoPublish();
+            } else {
+                setStatus('ERROR');
+                setErrorMessage(result.message || "שגיאה בהתחברות");
             }
+            return;
+        }
+
+        // 2. בדיקה אם החלון נסגר (Fallback)
+        if (popup && popup.closed) {
+            clearInterval(checkInterval);
+            // אם החלון נסגר, ניתן לשרת רגע לעכל ואז ננסה להתקדם
+            setTimeout(() => {
+                if (status === 'CONNECTING') {
+                    handleAutoPublish(); 
+                }
+            }, 1000);
         }
     }, 1000);
   };
 
   // פונקציה 2: הפעלת הבוט לאחר החיבור
   const handleAutoPublish = async () => {
+    // מניעת כפילויות
+    if (status === 'SUCCESS' || status === 'PROCESSING') return;
+
     setStatus('PROCESSING');
 
     try {
       const localFlow = localStorage.getItem('flowbot_draft_flow');
       
-      // אם אין בוט שמור בזיכרון, אולי אנחנו במצב עריכה של בוט קיים?
-      // במקרה כזה פשוט נעביר לדף הסיום
-      if (!localFlow) {
-          console.warn("No draft flow found, redirecting anyway...");
-          setStatus('SUCCESS');
-          setTimeout(() => router.push("/builder/publish"), 1500);
-          return;
-      }
-
+      // בדיקת חיבור מול השרת
       const res = await fetch('/api/bot/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-              flow: JSON.parse(localFlow),
+              flow: localFlow ? JSON.parse(localFlow) : null,
               status: 'ACTIVE' 
           }),
       });
 
       if (!res.ok) {
-          // גם אם הפרסום נכשל, החיבור לפייסבוק הצליח
-          // אז לא נחסום את המשתמש, רק נתריע
-          console.error("Publish failed but auth worked");
+          throw new Error("נראה שהחיבור לפייסבוק לא הושלם בשרת.");
       }
 
       setStatus('SUCCESS');
@@ -130,13 +150,13 @@ export default function WhatsappConnectionPage() {
       
       setTimeout(() => {
           router.push("/builder/publish"); 
-      }, 2000);
+      }, 1500);
 
     } catch (error: any) {
       console.error("Publish Error:", error);
-      // במקרה שגיאה בפרסום, נעביר בכל זאת לדף הבא כי החיבור הצליח
-      setStatus('SUCCESS');
-      setTimeout(() => router.push("/builder/publish"), 2000);
+      // אם נכשלנו, נחזור למצב שגיאה כדי שהמשתמש ינסה שוב
+      setStatus('ERROR');
+      setErrorMessage("החיבור לא זוהה. אנא נסה שוב.");
     }
   };
 
@@ -270,6 +290,17 @@ export default function WhatsappConnectionPage() {
                         </>
                     )}
                 </button>
+
+                {/* כפתור חילוץ: מופיע רק אם המשתמש נתקע במצב "מתחבר" למשך 5 שניות */}
+                {showManualCheck && status === 'CONNECTING' && (
+                    <button 
+                        onClick={() => handleAutoPublish()}
+                        className="mt-6 text-sm text-blue-600 underline flex items-center justify-center gap-2 mx-auto hover:text-blue-800 transition-colors"
+                    >
+                        <RefreshCw size={14} />
+                        החלון נסגר אבל האתר נתקע? לחץ כאן לבדיקה ידנית
+                    </button>
+                )}
 
                 <p className="mt-6 text-xs text-neutral-400 max-w-xs mx-auto">
                     בכפוף לתנאי השימוש של Meta ו-WhatsApp Business API.
