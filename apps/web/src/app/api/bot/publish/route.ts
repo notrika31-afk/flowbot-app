@@ -60,12 +60,13 @@ export async function POST(req: Request) {
         // === תרחיש A: קיבלנו פרטים ידנית (כמו קודם) ===
         // נשמור או נעדכן אותם בדיוק כמו בקוד המקורי
         
-        const existingConnection = await prisma.whatsAppConnection.findFirst({
+        // תיקון: שינוי מ-whatsAppConnection ל-wabaConnection
+        const existingConnection = await prisma.wabaConnection.findFirst({
             where: { userId: userId, phoneNumberId: waba.phoneId }
         });
 
         if (existingConnection) {
-            await prisma.whatsAppConnection.update({
+            await prisma.wabaConnection.update({
                 where: { id: existingConnection.id },
                 data: {
                     wabaId: waba.wabaId,
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
                 }
             });
         } else {
-            await prisma.whatsAppConnection.create({
+            await prisma.wabaConnection.create({
                 data: {
                     userId: userId,
                     phoneNumberId: waba.phoneId,
@@ -91,7 +92,8 @@ export async function POST(req: Request) {
         // === תרחיש B: לא קיבלנו פרטים (חיבור אוטומטי/פייסבוק) ===
         // נחפש אם יש חיבור קיים למשתמש בדאטה-בייס
         
-        const existingConnection = await prisma.whatsAppConnection.findFirst({
+        // תיקון: שינוי מ-whatsAppConnection ל-wabaConnection
+        const existingConnection = await prisma.wabaConnection.findFirst({
             where: { userId: userId },
             orderBy: { updatedAt: 'desc' } // לוקחים את החיבור האחרון שהיה פעיל
         });
@@ -102,7 +104,7 @@ export async function POST(req: Request) {
         }
 
         // אם מצאנו חיבור, רק נקשר אותו לבוט החדש/המעודכן
-        await prisma.whatsAppConnection.update({
+        await prisma.wabaConnection.update({
             where: { id: existingConnection.id },
             data: {
                 botId: bot.id,

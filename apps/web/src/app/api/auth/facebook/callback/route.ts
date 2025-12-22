@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserSession } from "@/lib/auth"; 
+import { getUserSession } from "@/lib/auth";
+// תיקון: ייבוא ה-Enum כדי למנוע קריסה
+import { IntegrationProvider } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -137,7 +139,8 @@ export async function GET(req: Request) {
         where: {
             userId_provider: {
                 userId: session.id,
-                provider: "FACEBOOK"
+                // תיקון: שימוש ב-Enum
+                provider: IntegrationProvider.FACEBOOK
             }
         },
         update: {
@@ -152,7 +155,8 @@ export async function GET(req: Request) {
         },
         create: {
             userId: session.id,
-            provider: "FACEBOOK",
+            // תיקון: שימוש ב-Enum
+            provider: IntegrationProvider.FACEBOOK,
             status: "CONNECTED",
             accessToken: accessToken,
             metadata: {
