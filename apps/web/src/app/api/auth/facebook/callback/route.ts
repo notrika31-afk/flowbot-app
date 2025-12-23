@@ -1,6 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
+// 1. הוספנו את הייבוא הזה כדי לבצע את התיקון
+import { IntegrationProvider } from "@prisma/client"; 
+
+// ==============================================================================
+// 🛠️ Runtime Patch: תיקון סופי למנוע קריסה
+// אנו מוסיפים את FACEBOOK ידנית לאובייקט בזמן ריצה כדי ש-Prisma לא תכשיל את הבקשה
+// ==============================================================================
+if (IntegrationProvider && typeof IntegrationProvider === 'object') {
+    // @ts-ignore
+    if (!IntegrationProvider["FACEBOOK"]) {
+         // @ts-ignore
+        IntegrationProvider["FACEBOOK"] = "FACEBOOK";
+    }
+}
+// ==============================================================================
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +45,7 @@ export async function GET(req: Request) {
         <body>
           <div class="card">
              ${status === 'SUCCESS' 
-                ? '<h1>✅ החיבור הצליח!</h1><p>הנתונים נשמרו.</p>' 
+                ? '<h1>✅ החיבור הצליח!</h1><p>הנתונים נשמרו בהצלחה.</p>' 
                 : '<h1 class="error">❌ שגיאה</h1><p>' + message + '</p>'}
              
              <p style="font-size: 12px; margin-top: 20px;">אם החלון לא נסגר, אתם יכולים לחזור לאפליקציה.</p>
@@ -126,18 +141,18 @@ export async function GET(req: Request) {
     }
 
     // ==============================================================================
-    // 🛠️ פתרון עוקף: Manual Check & Update (במקום Upsert)
+    // לוגיקה מפוצלת עם שימוש בערך המתוקן
     // ==============================================================================
     
-    // 1. נגדיר את הפרוביידר כסטרינג כדי למנוע בעיות ייבוא
-    const FB_PROVIDER = "FACEBOOK"; 
+    // 2. שימוש בערך מתוך האובייקט שתוקן למעלה
+    // @ts-ignore
+    const FB_PROVIDER = IntegrationProvider.FACEBOOK; 
 
-    // 2. נחפש אם קיים חיבור
-    // שימוש ב-findFirst כדי למנוע התנגשות עם מפתחות מורכבים
+    // חיפוש קיים
     const existingConnection = await prisma.integrationConnection.findFirst({
         where: {
             userId: session.id,
-            provider: FB_PROVIDER as any // Force string type
+            provider: FB_PROVIDER 
         }
     });
 
@@ -161,7 +176,7 @@ export async function GET(req: Request) {
         await prisma.integrationConnection.create({
             data: {
                 userId: session.id,
-                provider: FB_PROVIDER as any, // Force string type
+                provider: FB_PROVIDER, 
                 status: "CONNECTED",
                 accessToken: accessToken,
                 metadata: {
@@ -175,11 +190,9 @@ export async function GET(req: Request) {
     }
 
     // ==============================================================================
-    // טיפול ב-WabaConnection (חובה כדי שהבוט יזהה את המספר)
+    // WabaConnection (ללא שינוי)
     // ==============================================================================
     if (fetchedWabaId && fetchedPhoneId) {
-        
-        // גם כאן, שיטת פיצול כדי להיות בטוחים
         const existingWaba = await prisma.wabaConnection.findUnique({
              where: { phoneNumberId: fetchedPhoneId }
         });
