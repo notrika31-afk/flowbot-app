@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 3001",
-    "build": "npx prisma generate --schema=../../prisma/schema.prisma && next build",
-    "start": "next start",
+"build": "prisma db push --schema=../../prisma/schema.prisma && prisma generate --schema=../../prisma/schema.prisma && next build",    "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
