@@ -14,7 +14,7 @@ import {
   AlertCircle 
 } from "lucide-react";
 
-// --- רכיב קונפטי פשוט (CSS/Motion) לאווירה ---
+// --- רכיב קונפטי ---
 const Confetti = () => {
   const colors = ["#FFC700", "#FF0000", "#2E3192", "#41BBC7"];
   return (
@@ -44,54 +44,75 @@ const Confetti = () => {
   );
 };
 
-// --- עמוד ה-Publish ---
-
 export default function PublishPage() {
   const router = useRouter();
   const [status, setStatus] = useState<"deploying" | "success" | "error">("deploying");
   const [currentStep, setCurrentStep] = useState(0);
+  const [errorMessage, setErrorMessage] = useState(""); // להציג שגיאה אמיתית אם יש
   
-  // שלבי ההתקנה שמוצגים למשתמש בזמן הטעינה
   const deploymentSteps = [
-    { text: "מאמת פרטי Meta API...", icon: <Server size={18} /> },
-    { text: "מגדיר Webhook ומספרי טלפון...", icon: <Zap size={18} /> },
-    { text: "מסנכרן תבניות AI...", icon: <Loader2 size={18} className="animate-spin" /> },
+    { text: "יוצר קשר עם השרת...", icon: <Server size={18} /> },
+    { text: "מאמת חיבור WhatsApp...", icon: <Zap size={18} /> },
+    { text: "שומר ומפרסם את הבוט...", icon: <Loader2 size={18} className="animate-spin" /> },
   ];
 
   useEffect(() => {
-    // 1. שליפת הנתונים (במציאות נשלח אותם לשרת)
-    const storedCreds = sessionStorage.getItem("temp_bot_creds");
-    
-    if (!storedCreds) {
-      // אם אין נתונים, נחזיר אותו אחורה (הגנה)
-      // setStatus("error"); 
-      // return;
-    }
+    const publishBot = async () => {
+      try {
+        // שלב 1: התחלה ויזואלית
+        setCurrentStep(0);
+        await new Promise(r => setTimeout(r, 1000)); // השהייה קטנה לאפקט
 
-    // 2. סימולציה של תהליך ה-Deployment (במקום קריאת API אמיתית)
-    let step = 0;
-    const interval = setInterval(() => {
-      step++;
-      setCurrentStep(step);
+        // שלב 2: שליפת המידע מהאחסון המקומי
+        // הערה: וודא שבקומפוננטת ה-Builder אתה שומר את ה-Flow ב-localStorage לפני המעבר לעמוד הזה
+        const flowDataString = localStorage.getItem("pending_flow_data") || "{}"; 
+        const flowData = JSON.parse(flowDataString);
 
-      if (step >= deploymentSteps.length) {
-        clearInterval(interval);
+        setCurrentStep(1); // עדכון ויזואלי
+
+        // שלב 3: קריאה אמיתית ל-API
+        const response = await fetch("/api/bot/publish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            flow: flowData,
+            // אנחנו לא שולחים waba ידנית כי אנחנו סומכים על החיבור לפייסבוק שכבר קיים ב-DB
+            status: "ACTIVE"
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to publish bot");
+        }
+
+        // הצלחה!
+        setCurrentStep(2);
+        await new Promise(r => setTimeout(r, 800)); // רגע של מתח...
         setStatus("success");
-      }
-    }, 1500); // כל שלב לוקח 1.5 שניות
+        
+        // ניקוי נתונים זמניים
+        localStorage.removeItem("pending_flow_data");
 
-    return () => clearInterval(interval);
+      } catch (err: any) {
+        console.error("Publish Error:", err);
+        setErrorMessage(err.message || "שגיאה בפרסום הבוט");
+        setStatus("error");
+      }
+    };
+
+    publishBot();
   }, []);
 
   return (
-    <div className="w-full min-h-full flex items-center justify-center p-4 relative">
+    <div className="w-full min-h-screen flex items-center justify-center p-4 relative" dir="rtl">
       
-      {/* כרטיס הפעולה המרכזי */}
       <motion.div
         layout
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative w-full max-w-xl bg-white border-[3px] border-black rounded-3xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden z-10"
+        className="relative w-full max-w-xl bg-white border-[3px] border-black rounded-[2rem] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden z-10"
       >
         <AnimatePresence mode="wait">
           
@@ -102,14 +123,14 @@ export default function PublishPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0, x: -20 }}
-              className="p-10 flex flex-col items-center text-center"
+              className="p-6 md:p-10 flex flex-col items-center text-center"
             >
-              <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mb-6 animate-pulse">
+              <div className="w-14 h-14 md:w-16 md:h-16 bg-neutral-100 rounded-full flex items-center justify-center mb-6 animate-pulse">
                 <Loader2 size={32} className="animate-spin text-neutral-400" />
               </div>
               
-              <h2 className="text-2xl font-black text-neutral-900 mb-2">מכין את הבוט שלך...</h2>
-              <p className="text-neutral-500 font-medium mb-8">
+              <h2 className="text-xl md:text-2xl font-black text-neutral-900 mb-2">מכין את הבוט שלך...</h2>
+              <p className="text-sm md:text-base text-neutral-500 font-medium mb-8 max-w-xs md:max-w-none">
                 אנחנו מחברים את המערכת לשרתי Meta ומעלים את המוח של ה-AI לאוויר.
               </p>
 
@@ -121,7 +142,7 @@ export default function PublishPage() {
                   return (
                     <div key={index} className="flex items-center gap-3 transition-all duration-500">
                       <div className={`
-                        w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors
+                        w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors shrink-0
                         ${isCompleted ? "bg-green-500 border-green-500 text-white" : 
                           isCurrent ? "border-black text-black bg-white" : "border-neutral-200 text-neutral-200"}
                       `}>
@@ -140,98 +161,70 @@ export default function PublishPage() {
             </motion.div>
           )}
 
-          {/* --- מצב 2: הצלחה (חגיגה) --- */}
+          {/* --- מצב 2: הצלחה --- */}
           {status === "success" && (
             <motion.div
               key="success"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="relative p-10 flex flex-col items-center text-center"
+              className="relative p-6 md:p-10 flex flex-col items-center text-center"
             >
-              <Confetti /> {/* קונפטי ברקע */}
+              <Confetti />
               
-              <div className="w-24 h-24 bg-[#25D366] rounded-full flex items-center justify-center mb-6 shadow-lg relative z-10 border-4 border-white">
-                <CheckCircle2 size={48} className="text-white" strokeWidth={3} />
+              <div className="w-20 h-20 md:w-24 md:h-24 bg-[#25D366] rounded-full flex items-center justify-center mb-6 shadow-lg relative z-10 border-4 border-white">
+                <CheckCircle2 size={40} className="text-white md:w-12 md:h-12" strokeWidth={3} />
               </div>
 
-              <h2 className="text-3xl font-black text-neutral-900 mb-2 relative z-10">
+              <h2 className="text-2xl md:text-3xl font-black text-neutral-900 mb-2 relative z-10">
                 הבוט באוויר! 🚀
               </h2>
-              <p className="text-neutral-500 font-medium mb-8 max-w-sm relative z-10">
+              <p className="text-sm md:text-base text-neutral-500 font-medium mb-8 max-w-sm relative z-10">
                 כל הכבוד! הבוט מחובר, פעיל ומוכן לשוחח עם הלקוחות שלך.
               </p>
 
-              {/* קישור לבוט */}
-              <div className="w-full bg-neutral-900 text-white p-4 rounded-xl flex items-center justify-between mb-6 relative z-10">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white/10 rounded-lg">
-                        <Share2 size={20} />
-                    </div>
-                    <div className="text-right">
-                        <div className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">קישור ישיר לבוט</div>
-                        <div className="font-mono text-sm">wa.me/972501234567</div>
-                    </div>
-                </div>
-                <button className="p-2 hover:bg-white/20 rounded-lg transition-colors">
-                    <ExternalLink size={18} />
-                </button>
-              </div>
-
-              <div className="flex gap-3 w-full relative z-10">
+              <div className="flex flex-col sm:flex-row gap-3 w-full relative z-10">
                   <button 
                     onClick={() => router.push('/dashboard')}
-                    className="flow-btn w-full bg-white text-black hover:bg-neutral-100 flex-1"
+                    className="w-full sm:flex-1 py-3.5 bg-white border-2 border-neutral-200 text-black font-bold rounded-xl hover:bg-neutral-50 transition active:scale-95"
                   >
                     לדשבורד הניהול
                   </button>
+                  {/* כאן אפשר להוסיף קישור דינמי אם ה-API מחזיר מספר טלפון */}
                   <button 
-                    onClick={() => window.open('https://wa.me/972501234567', '_blank')}
-                    className="flow-btn w-full flex-1 bg-black text-white border-black hover:bg-neutral-800"
+                    className="w-full sm:flex-1 py-3.5 bg-black text-white font-bold rounded-xl border-2 border-black hover:bg-neutral-800 transition active:scale-95"
                   >
-                    בדוק בווטסאפ
+                    סיום
                   </button>
               </div>
             </motion.div>
           )}
 
-          {/* --- מצב 3: שגיאה (Fallback) --- */}
+          {/* --- מצב 3: שגיאה --- */}
           {status === "error" && (
             <motion.div
               key="error"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="p-10 flex flex-col items-center text-center"
+              className="p-6 md:p-10 flex flex-col items-center text-center"
             >
-               <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-6 text-red-600 border-2 border-red-200">
-                 <AlertCircle size={40} />
+               <div className="w-16 h-16 md:w-20 md:h-20 bg-red-100 rounded-full flex items-center justify-center mb-6 text-red-600 border-2 border-red-200">
+                 <AlertCircle size={32} className="md:w-10 md:h-10" />
                </div>
-               <h2 className="text-2xl font-black text-neutral-900 mb-2">משהו השתבש</h2>
-               <p className="text-neutral-500 font-medium mb-8">
-                 לא הצלחנו להתחבר לשרתי Meta. ייתכן שהטוקן פג תוקף או שהנתונים אינם תואמים.
+               <h2 className="text-xl md:text-2xl font-black text-neutral-900 mb-2">משהו השתבש</h2>
+               <p className="text-sm md:text-base text-neutral-500 font-medium mb-8">
+                 {errorMessage || "לא הצלחנו להתחבר לשרת. אנא נסה שוב."}
                </p>
                <button 
-                 onClick={() => router.push('/builder/whatsapp')}
-                 className="flow-btn w-full flex items-center justify-center gap-2"
+                 onClick={() => window.location.reload()}
+                 className="w-full py-3.5 bg-black text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition"
                >
-                 חזור להגדרות חיבור <ArrowRight size={18}/>
+                 נסה שוב <ArrowRight size={18}/>
                </button>
             </motion.div>
           )}
 
         </AnimatePresence>
       </motion.div>
-
-      {/* טקסט עזרה למטה */}
-      {status === "success" && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1 }}
-            className="absolute bottom-8 text-neutral-400 text-xs font-medium"
-          >
-            ניתן לשנות את ההגדרות בכל זמן דרך לוח הבקרה
-          </motion.div>
-      )}
     </div>
   );
 }
