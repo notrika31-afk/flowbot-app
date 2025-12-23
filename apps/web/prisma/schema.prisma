@@ -316,7 +316,8 @@ enum IntegrationProvider {
   zoom
   site_link
   paybox
-  bit 
+  bit
+  facebook
 }
 
 enum IntegrationStatus {
