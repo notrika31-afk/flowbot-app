@@ -1,41 +1,46 @@
-// apps/web/src/lib/whatsapp.ts
 import { env } from "@/lib/config/env";
 
 const WHATSAPP_GRAPH_BASE = "https://graph.facebook.com/v21.0";
 
 type SendTextOptions = {
-  to: string;   // מספר הלקוח, למשל "9725xxxxxxxx"
-  body: string; // תוכן ההודעה
+  to: string;           // מספר הלקוח
+  body: string;         // תוכן ההודעה
+  phoneNumberId: string; // המזהה של העסק השולח
+  accessToken: string;   // הטוקן של העסק השולח
 };
 
-export async function sendWhatsAppText({ to, body }: SendTextOptions) {
-  if (!env.WHATSAPP_API_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID) {
-    console.warn("WhatsApp not configured – missing token or phone number id");
-    throw new Error("WHATSAPP_NOT_CONFIGURED");
+export async function sendWhatsAppText({ to, body, phoneNumberId, accessToken }: SendTextOptions) {
+  // בדיקת תקינות בסיסית
+  if (!phoneNumberId || !accessToken) {
+    console.error("❌ WhatsApp Send Error: Missing credentials");
+    throw new Error("WHATSAPP_MISSING_CREDENTIALS");
   }
 
-  const url = `${WHATSAPP_GRAPH_BASE}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `${WHATSAPP_GRAPH_BASE}/${phoneNumberId}/messages`;
+
+  console.log(`📤 Sending WhatsApp to ${to} via ${phoneNumberId}`);
 
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.WHATSAPP_API_TOKEN}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
       messaging_product: "whatsapp",
-      to,
+      recipient_type: "individual",
+      to: to,
       type: "text",
-      text: { body },
+      text: { body: body },
     }),
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    console.error("WhatsApp send error:", res.status, text);
-    throw new Error("WHATSAPP_SEND_FAILED");
+    const errorData = await res.text();
+    console.error("❌ WhatsApp API Error:", res.status, errorData);
+    throw new Error(`WHATSAPP_SEND_FAILED: ${errorData}`);
   }
 
-  const json = await res.json().catch(() => null);
+  const json = await res.json();
   return json;
 }
