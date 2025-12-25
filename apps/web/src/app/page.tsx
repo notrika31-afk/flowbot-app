@@ -589,25 +589,33 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* פוטר */}
-          <footer className="px-5 sm:px-8 pb-5 text-[11px] text-slate-400 flex flex-col sm:flex-row items-center justify-between border-t border-slate-200/70 gap-2">
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
-              <span>FlowBot © 2025 — כל הזכויות שמורות</span>
-              <span className="hidden sm:inline">|</span>
-              {/* הקישור שגוגל מחייב - נוסף כאן */}
-              <a 
-                href="/privacy.html" 
-                target="_blank" 
-                rel="noreferrer"
-                className="underline hover:text-slate-600 transition-colors"
-              >
-                Privacy Policy
-              </a>
+          {/* פוטר - מותאם לאימות פייסבוק וגוגל */}
+          <footer className="px-5 sm:px-8 pb-8 pt-5 text-[11px] text-slate-400 flex flex-col items-center border-t border-slate-200/70 gap-4">
+            
+            <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-2">
+              <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
+                <span>FlowBot © 2025</span>
+                <span className="hidden sm:inline">|</span>
+                <a 
+                  href="https://www.flowbot.ink/privacy.html" 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="underline hover:text-slate-600 transition-colors"
+                >
+                  Privacy Policy
+                </a>
+              </div>
+
+              <span className="text-center sm:text-left">
+                נבנה עם דגש על אבטחה, מהירות וחוויית משתמש.
+              </span>
             </div>
 
-            <span className="text-center sm:text-left">
-              נבנה עם דגש על אבטחה, מהירות וחוויית משתמש.
-            </span>
+            {/* שורת הבעלות - חובה עבור אימות פייסבוק */}
+            <div className="text-[10px] opacity-60">
+              Operated by ELIA IZHAK NOTRIKA
+            </div>
+
           </footer>
         </div>
       </div>
