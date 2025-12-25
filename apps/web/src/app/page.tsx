@@ -613,7 +613,7 @@ export default function HomePage() {
 
             {/* שורת הבעלות - חובה עבור אימות פייסבוק */}
             <div className="text-[10px] opacity-60">
-              Operated by ELIA IZHAK NOTRIKA
+              Operated by אליה יצחק נוטריקה
             </div>
 
           </footer>
