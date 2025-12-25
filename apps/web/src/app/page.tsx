@@ -591,7 +591,20 @@ export default function HomePage() {
 
           {/* פוטר */}
           <footer className="px-5 sm:px-8 pb-5 text-[11px] text-slate-400 flex flex-col sm:flex-row items-center justify-between border-t border-slate-200/70 gap-2">
-            <span>FlowBot © 2025 — כל הזכויות שמורות</span>
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
+              <span>FlowBot © 2025 — כל הזכויות שמורות</span>
+              <span className="hidden sm:inline">|</span>
+              {/* הקישור שגוגל מחייב - נוסף כאן */}
+              <a 
+                href="/privacy.html" 
+                target="_blank" 
+                rel="noreferrer"
+                className="underline hover:text-slate-600 transition-colors"
+              >
+                Privacy Policy
+              </a>
+            </div>
+
             <span className="text-center sm:text-left">
               נבנה עם דגש על אבטחה, מהירות וחוויית משתמש.
             </span>
