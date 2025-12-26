@@ -68,15 +68,20 @@ export default function WhatsappConnectionPage() {
     localStorage.removeItem('fb_auth_result');
 
     const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
-    const callbackUrl = `${window.location.origin}/api/integrations/whatsapp/callback`; 
-
+    const callbackUrl = `https://flowbot.ink/api/integrations/whatsapp/callback`;
     if (!appId) {
         setStatus('ERROR');
         setErrorMessage("שגיאת מערכת: חסר מזהה אפליקציה (App ID).");
         return;
     }
 
-    const targetUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${callbackUrl}&scope=whatsapp_business_management,whatsapp_business_messaging,email,public_profile&response_type=code`;
+    // --- התיקון המדויק כאן: הוספת extras לתמיכה ב-Embedded Signup ---
+    const targetUrl = `https://www.facebook.com/v19.0/dialog/oauth?` + 
+      `client_id=${appId}` +
+      `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
+      `&scope=whatsapp_business_management,whatsapp_business_messaging,email,public_profile` +
+      `&response_type=code` +
+      `&extras=${encodeURIComponent(JSON.stringify({ setup: {} }))}`;
     
     const width = 600;
     const height = 700;

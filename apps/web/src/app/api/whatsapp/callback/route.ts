@@ -1,58 +1,76 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getUserSession } from "@/lib/auth"; // ייבוא הפונקציה המדויקת מהקובץ שלך
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   try {
-    // 1. אימות שהמשתמש מחובר
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user?.email) {
-      return new NextResponse("Unauthorized", { status: 401 });
+    const { searchParams } = new URL(req.url);
+    const code = searchParams.get("code");
+    
+    // 1. אימות משתמש מחובר לפי ה-auth.ts שלך
+    const session = await getUserSession();
+    
+    if (!session || !session.id) {
+      return new NextResponse("Unauthorized - Please log in", { status: 401 });
     }
 
-    // 2. קבלת הטוקן וה-ID מהכפתור שבנינו
-    const body = await req.json();
-    const { accessToken, userID } = body;
+    if (!code) return new NextResponse("No code provided from Facebook", { status: 400 });
 
-    console.log("🔥 קיבלתי בקשה ליצירת בוט עבור:", session.user.email);
+    // --- כאן יבוא הקוד שיחליף את ה-code ב-access_token מול פייסבוק בעתיד ---
+    // כרגע אנחנו משתמשים בנתונים זמניים כדי לבדוק שהחיבור וה-Database עובדים
+    const accessToken = "TEMP_TOKEN_" + Math.random().toString(36).substring(7); 
+    const wabaId = "TEMP_WABA_" + Math.random().toString(36).substring(7);
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!user) {
-      return new NextResponse("User not found", { status: 404 });
-    }
-
-    // 3. יצירת הבוט + הגדרות הוואטסאפ במכה אחת
-    const newBot = await prisma.bot.create({
-      data: {
-        name: "הבוט החדש שלי 🤖", // שם התחלתי
-        ownerId: user.id,
-        isActive: true,
-        status: "ACTIVE",
-        description: "חובר בהצלחה דרך פייסבוק",
-        
-        // יצירת החיבור לטבלת הוואטסאפ
-        wabaConnection: {
-          create: {
-             userId: user.id,
-             wabaId: userID, // מזהה חשבון הוואטסאפ
-             phoneNumberId: userID, // זמני - בהמשך נעדכן למספר האמיתי
-             accessToken: accessToken,
-             verifyToken: "flowbot_verify_token",
-             phoneNumber: "", // יתעדכן בהמשך
-             isActive: true
-          }
+    // 2. שמירת החיבור ב-Database תחת המשתמש המחובר
+    await prisma.wabaConnection.upsert({
+        where: { wabaId: wabaId },
+        update: { accessToken: accessToken, isActive: true },
+        create: {
+            userId: session.id, // שימוש ב-ID מהסשן שלך
+            wabaId: wabaId,
+            phoneNumberId: wabaId,
+            accessToken: accessToken,
+            verifyToken: "flowbot_verify_token",
+            isActive: true
         }
-      },
     });
 
-    return NextResponse.json({ success: true, botId: newBot.id });
+    // 3. הקוד שסוגר את ה-Popup ומעדכן את האתר הראשי (Frontend)
+    return new NextResponse(`
+      <html>
+        <head>
+          <title>Connecting to WhatsApp...</title>
+        </head>
+        <body style="background: #f9fafb; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif;">
+          <div style="text-align: center;">
+            <div style="color: #16a34a; font-size: 48px; margin-bottom: 10px;">✓</div>
+            <h2 style="margin-bottom: 5px;">החיבור הצליח!</h2>
+            <p style="color: #6b7280;">החלון נסגר ומעדכן את הבוט שלך...</p>
+          </div>
+          
+          <script>
+            // 1. מעדכן את ה-LocalStorage שהחיבור עבר בהצלחה
+            localStorage.setItem('fb_auth_result', JSON.stringify({ 
+              status: 'SUCCESS',
+              timestamp: new Date().getTime()
+            }));
+            
+            // 2. שולח הודעה לחלון הראשי (למקרה שהוא מאזין)
+            if (window.opener) {
+              window.opener.postMessage({ type: 'FACEBOOK_AUTH_RESULT', status: 'SUCCESS' }, '*');
+            }
+            
+            // 3. סוגר את החלון אחרי חצי שנייה כדי שהמשתמש יספיק לראות "וי"
+            setTimeout(() => {
+              window.close();
+            }, 600);
+          </script>
+        </body>
+      </html>
+    `, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 
   } catch (error) {
-    console.error("❌ שגיאה ביצירת הבוט:", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    console.error("❌ Callback Error:", error);
+    return new NextResponse("Internal Server Error during connection", { status: 500 });
   }
 }
