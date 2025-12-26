@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Script from 'next/script';
-import { Loader2, CheckCircle2, Facebook } from 'lucide-react'; 
+import { Loader2, CheckCircle2 } from 'lucide-react'; 
 
 // הגדרת הטיפוסים ל-SDK של פייסבוק
 declare global {
@@ -13,7 +13,7 @@ declare global {
 }
 
 interface FacebookConnectButtonProps {
-  onSuccess?: (token: string) => void; // השארתי את ה-Prop שלך כדי שיתאים לשאר הקוד
+  onSuccess?: (token: string) => void;
 }
 
 export const FacebookConnectButton: React.FC<FacebookConnectButtonProps> = ({ onSuccess }) => {
@@ -42,7 +42,7 @@ export const FacebookConnectButton: React.FC<FacebookConnectButtonProps> = ({ on
       return;
     }
 
-    // הפעלת תהליך ה-Embedded Signup האמיתי
+    // הפעלת תהליך ה-Embedded Signup
     window.FB.login(
       function (response: any) {
         if (response.authResponse) {
@@ -50,18 +50,29 @@ export const FacebookConnectButton: React.FC<FacebookConnectButtonProps> = ({ on
           
           const { accessToken, userID } = response.authResponse;
           
-          // שליחת הטוקן לשרת שלנו לשמירה (נבנה את ה-API הזה בשלב הבא)
-          // בינתיים אנחנו רק מדפיסים אותו ומפעילים את ה-onSuccess
-          console.log("Token received:", accessToken);
-          
-          // כאן נבצע את השמירה האמיתית לדאטה-בייס בעתיד הקרוב
-          // fetch('/api/integrations/whatsapp/callback', ...)
-
-          setStatus('connected');
-          
-          if (onSuccess) {
-            onSuccess(accessToken);
-          }
+          // --- השינוי הגדול: שליחה לשרת ---
+          fetch('/api/integrations/whatsapp/callback', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ accessToken, userID })
+          })
+          .then(async (res) => {
+             if (res.ok) {
+                console.log("Bot created successfully!");
+                setStatus('connected');
+                if (onSuccess) onSuccess(accessToken);
+                
+                // רענון העמוד כדי שהבוט החדש יופיע מיד
+                window.location.reload();
+             } else {
+                console.error("Server failed to create bot");
+                setStatus('error');
+             }
+          })
+          .catch(err => {
+             console.error("API Error:", err);
+             setStatus('error');
+          });
 
         } else {
           console.log("User cancelled login or did not fully authorize.");
@@ -69,7 +80,7 @@ export const FacebookConnectButton: React.FC<FacebookConnectButtonProps> = ({ on
         }
       },
       {
-        // הרשאות חובה - זה הלב של החיבור
+        // הרשאות חובה
         scope: "whatsapp_business_management, whatsapp_business_messaging",
         extras: {
           feature: "whatsapp_embedded_signup",
@@ -81,7 +92,6 @@ export const FacebookConnectButton: React.FC<FacebookConnectButtonProps> = ({ on
 
   return (
     <div className="flex flex-col items-center gap-4">
-      {/* טעינת הסקריפט של פייסבוק ברקע */}
       <Script
         src="https://connect.facebook.net/en_US/sdk.js"
         strategy="lazyOnload"
@@ -124,7 +134,7 @@ export const FacebookConnectButton: React.FC<FacebookConnectButtonProps> = ({ on
 
       {status === 'error' && (
         <p className="text-red-500 text-xs">
-          אירעה שגיאה בחיבור. וודא שחסם הפרסומות כבוי ונסה שוב.
+          אירעה שגיאה בחיבור. נסה שוב.
         </p>
       )}
     </div>
