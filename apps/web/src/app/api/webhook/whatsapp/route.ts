@@ -1,65 +1,37 @@
-// apps/web/src/app/api/webhooks/whatsapp/route.ts
 import { NextResponse } from "next/server";
-import { env } from "@/lib/config/env";
-import { prisma } from "@/lib/prisma";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-
-// ✅ שלב אימות מול Meta (GET)
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
+  
+  // פייסבוק שולח את הפרמטרים האלו כדי לבדוק את האתר שלך
   const mode = searchParams.get("hub.mode");
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === env.WHATSAPP_WEBHOOK_SECRET) {
-    return new Response(challenge || "", { status: 200 });
+  // בדיקה שהטוקן תואם למה שרשמת בפייסבוק
+  const VERIFY_TOKEN = "flowbot_verify_token";
+
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    console.log("✅ Webhook verified successfully!");
+    // חייבים להחזיר את ה-challenge כטקסט פשוט
+    return new NextResponse(challenge, { status: 200 });
   }
 
-  return new Response("Forbidden", { status: 403 });
+  console.error("❌ Webhook verification failed. Token mismatch.");
+  return new NextResponse("Forbidden", { status: 403 });
 }
 
-// ✅ קבלת הודעות בפועל (POST)
+// פונקציה לקבלת הודעות (POST) - זה מה שיגרום לבוט לענות
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    console.log("📩 New message received:", JSON.stringify(body, null, 2));
 
-    // Meta שולחת מבנה די עמוק, ניקח רק מה שצריך
-    const entry = body.entry?.[0];
-    const change = entry?.changes?.[0];
-    const value = change?.value;
-    const messages = value?.messages as any[] | undefined;
-
-    if (!messages || !messages.length) {
-      return NextResponse.json({ received: true });
-    }
-
-    for (const msg of messages) {
-      const from = msg.from as string;      // מספר הלקוח
-      const text = msg.text?.body as string | undefined;
-      const waId = value.metadata?.phone_number_id as string | undefined;
-
-      if (!text || !waId) continue;
-
-      // בשלב ראשון – רק נשמור לוג. בהמשך נחבר למנוע ה-Flow.
-      await prisma.message.create({
-        data: {
-          botId: "unknown", // TODO: לשייך לבוט לפי whatsappConnections + waId
-          userId: null,
-          fromPhone: from,
-          toPhone: waId,
-          direction: "IN",
-          content: text,
-        },
-      });
-
-      console.log("Incoming WhatsApp message:", { from, text });
-    }
-
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    console.error("WHATSAPP WEBHOOK ERROR:", err);
-    return NextResponse.json({ error: "webhook error" }, { status: 500 });
+    // כאן תבוא הלוגיקה של הבוט שלך בהמשך
+    
+    return new NextResponse("EVENT_RECEIVED", { status: 200 });
+  } catch (error) {
+    console.error("❌ Webhook Post Error:", error);
+    return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
