@@ -68,23 +68,25 @@ export default function WhatsappConnectionPage() {
     localStorage.removeItem('fb_auth_result');
 
     const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+    const configId = "1189331809956155"; // ה-Config ID החדש שלך
     const callbackUrl = `https://flowbot.ink/api/integrations/whatsapp/callback`;
+    
     if (!appId) {
         setStatus('ERROR');
         setErrorMessage("שגיאת מערכת: חסר מזהה אפליקציה (App ID).");
         return;
     }
 
-    // --- התיקון המדויק כאן: הוספת extras לתמיכה ב-Embedded Signup ---
+    // --- התיקון המדויק כאן: שימוש ב-config_id במקום extras ---
     const targetUrl = `https://www.facebook.com/v19.0/dialog/oauth?` + 
       `client_id=${appId}` +
+      `&config_id=${configId}` +
       `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
-      `&scope=whatsapp_business_management,whatsapp_business_messaging,email,public_profile` +
       `&response_type=code` +
-      `&extras=${encodeURIComponent(JSON.stringify({ setup: {} }))}`;
+      `&scope=whatsapp_business_management,whatsapp_business_messaging`;
     
     const width = 600;
-    const height = 700;
+    const height = 750; // הגבהתי מעט כדי שכל אשף וואטסאפ יכנס בנוחות
     const left = typeof window !== 'undefined' ? (window.screen.width / 2) - (width / 2) : 0;
     const top = typeof window !== 'undefined' ? (window.screen.height / 2) - (height / 2) : 0;
 
