@@ -68,7 +68,7 @@ export default function WhatsappConnectionPage() {
     localStorage.removeItem('fb_auth_result');
 
     const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
-    const callbackUrl = `${window.location.origin}/api/auth/facebook/callback`; 
+    const callbackUrl = `${window.location.origin}/api/integrations/whatsapp/callback`; 
 
     if (!appId) {
         setStatus('ERROR');
