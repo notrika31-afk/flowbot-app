@@ -11,7 +11,7 @@ import {
   MousePointerClick,
   CheckSquare,
   AlertCircle,
-  RefreshCw // הוספתי אייקון לכפתור רענון
+  RefreshCw 
 } from "lucide-react";
 
 export default function WhatsappConnectionPage() {
@@ -20,7 +20,7 @@ export default function WhatsappConnectionPage() {
   // ניהול מצבים
   const [status, setStatus] = useState<'IDLE' | 'CONNECTING' | 'PROCESSING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [showManualCheck, setShowManualCheck] = useState(false); // מצב לכפתור החילוץ
+  const [showManualCheck, setShowManualCheck] = useState(false); 
 
   // ניקוי שאריות בכניסה לדף
   useEffect(() => {
@@ -46,8 +46,9 @@ export default function WhatsappConnectionPage() {
   // --- מנגנון 2: זיהוי חזרה לחלון (Focus) ---
   useEffect(() => {
     const onFocus = () => {
-        // אם המשתמש חזר לחלון והסטטוס עדיין "מתחבר", נבדוק אם סיים
-        if (status === 'CONNECTING') {
+        // בודק אם יש תוצאה אמיתית ב-LocalStorage לפני שממשיך
+        const result = localStorage.getItem('fb_auth_result');
+        if (status === 'CONNECTING' && result) {
             handleAutoPublish();
         }
     };
@@ -62,13 +63,13 @@ export default function WhatsappConnectionPage() {
     setShowManualCheck(false);
 
     // הצגת כפתור חילוץ אם לוקח יותר מדי זמן
-    setTimeout(() => setShowManualCheck(true), 5000);
+    setTimeout(() => setShowManualCheck(true), 8000);
 
     // ניקוי לפני התחלה
     localStorage.removeItem('fb_auth_result');
 
     const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
-    const configId = "1189331809956155"; // ה-Config ID החדש שלך
+    const configId = "1189331809956155"; 
     const callbackUrl = `https://flowbot.ink/api/integrations/whatsapp/callback`;
     
     if (!appId) {
@@ -77,7 +78,7 @@ export default function WhatsappConnectionPage() {
         return;
     }
 
-    // --- התיקון המדויק כאן: שימוש ב-config_id במקום extras ---
+    // --- התיקון כאן: הבטחה שזה פותח את אשף הוואטסאפ ללא דפי פייסבוק ---
     const targetUrl = `https://www.facebook.com/v19.0/dialog/oauth?` + 
       `client_id=${appId}` +
       `&config_id=${configId}` +
@@ -86,7 +87,7 @@ export default function WhatsappConnectionPage() {
       `&scope=whatsapp_business_management,whatsapp_business_messaging`;
     
     const width = 600;
-    const height = 750; // הגבהתי מעט כדי שכל אשף וואטסאפ יכנס בנוחות
+    const height = 800; // הגבהתי עוד קצת כדי שכל הטופס של וואטסאפ ייראה
     const left = typeof window !== 'undefined' ? (window.screen.width / 2) - (width / 2) : 0;
     const top = typeof window !== 'undefined' ? (window.screen.height / 2) - (height / 2) : 0;
 
@@ -96,13 +97,12 @@ export default function WhatsappConnectionPage() {
         `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`
     );
 
-    // --- המנגנון החדש: בדיקה מחזורית (Polling) ---
+    // --- בדיקה מחזורית (Polling) ---
     const checkInterval = setInterval(() => {
-        // 1. בדיקה בתיבת הדואר (LocalStorage) - הדרך הכי אמינה
         const storedResult = localStorage.getItem('fb_auth_result');
         if (storedResult) {
             clearInterval(checkInterval);
-            if (popup && !popup.closed) popup.close(); // סגירה יזומה
+            if (popup && !popup.closed) popup.close(); 
             
             const result = JSON.parse(storedResult);
             if (result.status === 'SUCCESS') {
@@ -114,22 +114,22 @@ export default function WhatsappConnectionPage() {
             return;
         }
 
-        // 2. בדיקה אם החלון נסגר (Fallback)
         if (popup && popup.closed) {
             clearInterval(checkInterval);
-            // אם החלון נסגר, ניתן לשרת רגע לעכל ואז ננסה להתקדם
+            // רק אם ה-LocalStorage עודכן אנחנו ממשיכים, אחרת זו סגירה סתמית
             setTimeout(() => {
-                if (status === 'CONNECTING') {
+                const finalCheck = localStorage.getItem('fb_auth_result');
+                if (status === 'CONNECTING' && finalCheck) {
                     handleAutoPublish(); 
+                } else if (status === 'CONNECTING') {
+                    setStatus('IDLE'); // מחזיר למצב התחלתי אם החלון נסגר ללא סיום
                 }
             }, 1000);
         }
     }, 1000);
   };
 
-  // פונקציה 2: הפעלת הבוט לאחר החיבור
   const handleAutoPublish = async () => {
-    // מניעת כפילויות
     if (status === 'SUCCESS' || status === 'PROCESSING') return;
 
     setStatus('PROCESSING');
@@ -137,7 +137,6 @@ export default function WhatsappConnectionPage() {
     try {
       const localFlow = localStorage.getItem('flowbot_draft_flow');
       
-      // בדיקת חיבור מול השרת
       const res = await fetch('/api/bot/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -161,7 +160,6 @@ export default function WhatsappConnectionPage() {
 
     } catch (error: any) {
       console.error("Publish Error:", error);
-      // אם נכשלנו, נחזור למצב שגיאה כדי שהמשתמש ינסה שוב
       setStatus('ERROR');
       setErrorMessage("החיבור לא זוהה. אנא נסה שוב.");
     }
@@ -169,13 +167,9 @@ export default function WhatsappConnectionPage() {
 
   return (
     <div className="w-full min-h-[90vh] flex items-center justify-center p-4 md:p-6 overflow-x-hidden bg-neutral-50/50" dir="rtl">
-      
       <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-24 items-center relative">
-        
-        {/* אלמנט רקע דקורטיבי */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-100/40 rounded-full blur-[100px] -z-10" />
 
-        {/* --- צד ימין: הסבר ומדריך --- */}
         <div className="flex flex-col gap-6 order-2 lg:order-1 text-right">
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
@@ -199,7 +193,6 @@ export default function WhatsappConnectionPage() {
                 </p>
             </motion.div>
 
-            {/* רשימת הנחיות ברורה */}
             <div className="space-y-4">
                 <GuideItem 
                     icon={<MousePointerClick className="text-purple-500"/>} 
@@ -224,7 +217,6 @@ export default function WhatsappConnectionPage() {
             </div>
         </div>
 
-        {/* --- צד שמאל: כרטיס הפעולה --- */}
         <motion.div 
             className="w-full relative order-1 lg:order-2"
             initial={{ opacity: 0, scale: 0.95 }}
@@ -298,7 +290,6 @@ export default function WhatsappConnectionPage() {
                     )}
                 </button>
 
-                {/* כפתור חילוץ: מופיע רק אם המשתמש נתקע במצב "מתחבר" למשך 5 שניות */}
                 {showManualCheck && status === 'CONNECTING' && (
                     <button 
                         onClick={() => handleAutoPublish()}
@@ -315,7 +306,6 @@ export default function WhatsappConnectionPage() {
 
             </div>
         </motion.div>
-
       </div>
     </div>
   );

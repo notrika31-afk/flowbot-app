@@ -7,7 +7,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
     
-    // 1. אימות משתמש מחובר (מבוסס על ה-auth.ts שלך)
+    // 1. אימות משתמש מחובר
     const session = await getUserSession();
     if (!session || !session.id) {
       console.error("❌ Auth Error: No session found");
@@ -20,26 +20,51 @@ export async function GET(req: Request) {
       return new NextResponse("No code provided from Facebook", { status: 400 });
     }
 
-    // --- שלב זמני עבור ה-Review של פייסבוק ---
-    // אנחנו שומרים מחרוזת זמנית ב-Database כדי לבדוק שהכל מחובר תקין.
-    // ברגע שתקבל אישור ממטא, נעדכן כאן את הקריאה ל-API שלהם כדי להוציא טוקן אמיתי.
-    const accessToken = "PENDING_REVIEW_ACCESS_TOKEN"; 
-    const wabaId = searchParams.get("whatsapp_business_account_id") || "TEMP_WABA_" + Math.random().toString(36).substring(7);
+    // --- שלב החלפת הקוד בטוקן אמיתי (Token Exchange) ---
+    const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+    const appSecret = process.env.FACEBOOK_APP_SECRET; // וודא שזה קיים ב-.env שלך!
+    const redirectUri = "https://flowbot.ink/api/integrations/whatsapp/callback";
 
-    // 2. שמירת החיבור ב-Database (מניעת שגיאת ה-Unique של Prisma)
+    const tokenResponse = await fetch(
+      `https://graph.facebook.com/v19.0/oauth/access_token?` +
+      `client_id=${appId}` +
+      `&client_secret=${appSecret}` +
+      `&code=${code}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}`
+    );
+
+    const tokenData = await tokenResponse.json();
+
+    if (tokenData.error) {
+      console.error("❌ Facebook Token Error:", tokenData.error);
+      return new NextResponse(`Facebook Token Error: ${tokenData.error.message}`, { status: 400 });
+    }
+
+    // הטוקן האמיתי שקיבלנו מפייסבוק
+    const accessToken = tokenData.access_token;
+    
+    // שליפת ה-WABA ID מהפרמטרים שפייסבוק שולח חזרה בסיום ה-Embedded Signup
+    const wabaId = searchParams.get("whatsapp_business_account_id");
+
+    if (!wabaId) {
+        console.error("❌ WABA ID Error: No WhatsApp Business Account ID provided");
+        return new NextResponse("Missing WABA ID from Facebook", { status: 400 });
+    }
+
+    // 2. שמירת החיבור ב-Database
     const existingConnection = await prisma.wabaConnection.findFirst({
         where: { userId: session.id }
     });
 
     if (existingConnection) {
-        // עדכון חיבור קיים למשתמש זה
+        // עדכון חיבור קיים
         await prisma.wabaConnection.update({
             where: { id: existingConnection.id },
             data: { 
                 accessToken: accessToken, 
                 isActive: true,
                 wabaId: wabaId,
-                phoneNumberId: wabaId // בשלב זה נשתמש ב-ID של החשבון כמזהה טלפון זמני
+                phoneNumberId: wabaId // בשלב זה משתמשים ב-WABA ID, בהמשך נשלוף את ה-Phone Number ID המדויק
             }
         });
     } else {
@@ -68,24 +93,21 @@ export async function GET(req: Request) {
           <div style="text-align:center; padding: 20px;">
             <div style="color:#16a34a; font-size:60px; margin-bottom:10px;">✓</div>
             <h2 style="color:#111827; margin-bottom:10px;">החיבור הושלם בהצלחה!</h2>
-            <p style="color:#6b7280;">החלון ייסגר אוטומטית בעוד רגע...</p>
+            <p style="color:#6b7280;">חשבון הוואטסאפ סונכרן למערכת. החלון ייסגר מיד...</p>
           </div>
           <script>
-            // עדכון ה-LocalStorage שהדף הראשי מאזין לו
             localStorage.setItem('fb_auth_result', JSON.stringify({ 
               status: 'SUCCESS',
               timestamp: new Date().getTime() 
             }));
 
-            // שליחת הודעה ישירה לחלון האב (במידה והוא פתוח)
             if (window.opener) {
               window.opener.postMessage({ type: 'FACEBOOK_AUTH_RESULT', status: 'SUCCESS' }, '*');
             }
 
-            // סגירת החלון אחרי השהייה קלה כדי שהמשתמש יראה את ה-V
             setTimeout(() => {
               window.close();
-            }, 1200);
+            }, 1500);
           </script>
         </body>
       </html>
