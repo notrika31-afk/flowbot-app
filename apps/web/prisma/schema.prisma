@@ -243,46 +243,42 @@ enum SessionStatus {
 }
 
 // ---------------------------------------------------------
-// 📲 חיבורים ואינטגרציות
+// 📲 חיבורי ואינטגרציות וואטסאפ
 // ---------------------------------------------------------
 model WabaConnection {
-  id            String   @id @default(cuid())
-  userId        String
-  botId         String?  @unique
-  wabaId        String
-  phoneNumberId String
-  accessToken   String
-  verifyToken   String
-  phoneNumber   String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(cuid())
+  userId         String   @unique  // <--- עכשיו זה ייחודי ויתמוך ב-Upsert
+  botId          String?  @unique
+  wabaId         String?  // אופציונלי למניעת קריסות
+  phoneNumberId  String?  // אופציונלי למניעת קריסות
+  accessToken    String?
+  verifyToken    String?
+  phoneNumber    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   bot  Bot? @relation(fields: [botId], references: [id])
 
   @@index([userId])
 }
-
-// ✅ המודל החדש לניהול Embedded Signup
+// המודל לניהול Embedded Signup
 model WhatsAppConfig {
-  id            String   @id @default(cuid())
-  userId        String   @unique // קשר של 1:1 למשתמש
+  id             String   @id @default(cuid())
+  userId         String   @unique 
   
-  // מזהים שנקבל מפייסבוק
-  wabaId        String   // WhatsApp Business Account ID
-  phoneNumberId String   // מזהה מספר הטלפון לשליחה
-  accessToken   String   @db.Text // המפתח הסודי (ארוך) לשליחת הודעות
+  wabaId         String   
+  phoneNumberId  String   
+  accessToken    String   @db.Text 
   
-  // פרטים לתצוגה
-  phoneNumber   String?  // המספר עצמו (למשל +97250...)
-  businessName  String?  // שם העסק בוואטסאפ
+  phoneNumber    String?  
+  businessName   String?  
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  // חיבור למודל המשתמש (User)
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model HostedNumber {
@@ -302,19 +298,16 @@ model HostedNumber {
   @@index([userId])
 }
 
-// המודל הראשי שבו אנחנו משתמשים לאינטגרציות
+// המודל הראשי שבו אנחנו משתמשים לאינטגרציות (גוגל, סטרייפ וכו')
 model IntegrationConnection {
   id           String            @id @default(cuid())
   userId       String
-  botId        String?           // 👈 עכשיו יש גם בוט
+  botId        String?           
   provider     IntegrationProvider
   status       IntegrationStatus @default(DISCONNECTED)
   accessToken  String?
   refreshToken String?
-   
-  // ✅ הוספתי ואימתתי שזה קיים כדי למנוע את השגיאה האחרונה
   webhookId    String?            
-   
   expiresAt    DateTime?
   metadata     Json?
   createdAt    DateTime          @default(now())
@@ -328,6 +321,7 @@ model IntegrationConnection {
 }
 
 enum IntegrationProvider {
+  GOOGLE
   GOOGLE_CALENDAR
   GOOGLE_SHEETS 
   OUTLOOK_CALENDAR
