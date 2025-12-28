@@ -1,38 +1,42 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; // תיקון 1: שימוש במופע המרכזי
+import { prisma } from "@/lib/prisma"; 
 
-// ==============================================================================
-// תיקון קריטי לשגיאת Build:
-// הגדרות אלו מונעות מ-Next.js לנסות להריץ את הקוד בזמן הבנייה
-// ומחייבות שימוש בסביבת Node.js יציבה עבור Prisma.
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// ==============================================================================
 
 export async function POST(req: Request) {
   try {
     const data = await req.json();
-    const { userId, name, category, flow_json } = data;
+    // הוספתי כאן את businessDescription שיישלח מה-Frontend
+    const { userId, name, category, flow_json, businessDescription } = data;
 
     if (!userId || !name) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    // 1. עדכון ה"שכל" של העסק בטבלת המשתמש (אם נשלח כזה)
+    if (businessDescription !== undefined) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { businessDescription: businessDescription },
+      });
+      console.log(`✅ Updated business knowledge for user: ${userId}`);
+    }
+
+    // 2. יצירת הבוט (הקוד המקורי שלך ללא שינוי בשמות השדות)
     const bot = await prisma.bot.create({
       data: {
-        ownerId: userId,      // תיקון 2: השדה בסכמה הוא ownerId
+        ownerId: userId,      
         name,
-        // category,          // שים לב: אם השדה category לא קיים בסכמה, תמחק את השורה הזו
-        flowData: flow_json,  // תיקון 3: השדה בסכמה הוא flowData
+        flowData: flow_json,  
         status: "draft",
-        // connected: false,  // תיקון 4: שדות אלו כנראה לא בסכמה ולכן הוסתרו
-        // active: false,
+        // category: category, // ניתן להחזיר אם הוספת את השדה לסכמה
       },
     });
 
     return NextResponse.json({ success: true, bot });
   } catch (error) {
-    console.error(error);
+    console.error("❌ Save Bot Error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

@@ -11,13 +11,13 @@ generator client {
 // 🧑‍💼 טבלת משתמשים (בעלי העסק)
 // ---------------------------------------------------------
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  name          String?
-  password      String?
-  phone         String?
-  emailVerified DateTime?
-  image         String?
+  id               String    @id @default(cuid())
+  email            String    @unique
+  name             String?
+  password         String?
+  phone            String?
+  emailVerified    DateTime?
+  image            String?
 
   // נתוני מנוי (SaaS)
   plan             UserPlan  @default(FREE)
@@ -28,14 +28,17 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // ✅ השדרוג החדש: כאן נשמר ה"שכל" של העסק (המחירון/הוראות ה-AI)
+  businessDescription String? @db.Text
+
   // קשרים
-  bots           Bot[]
+  bots            Bot[]
   wabaConnections WabaConnection[]
-  hostedNumbers  HostedNumber[]
-  integrations   IntegrationConnection[]
-  sessions       Session[]
-  mfaCodes       MfaCode[]
-  accounts       Account[]
+  hostedNumbers   HostedNumber[]
+  integrations    IntegrationConnection[]
+  sessions        Session[]
+  mfaCodes        MfaCode[]
+  accounts        Account[]
   
   // ✅ חדש: חיבור להגדרות וואטסאפ (Embedded Signup)
   whatsappConfig WhatsAppConfig?
@@ -326,7 +329,7 @@ model IntegrationConnection {
 
 enum IntegrationProvider {
   GOOGLE_CALENDAR
-  GOOGLE_SHEETS // ✅ קיים ומאומת
+  GOOGLE_SHEETS 
   OUTLOOK_CALENDAR
   HUBSPOT
   SALESFORCE
@@ -352,18 +355,18 @@ enum IntegrationStatus {
 // 🔐 Auth (NextAuth)
 // ---------------------------------------------------------
 model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String? @db.Text
-  session_state     String?
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String? @db.Text
+  access_token       String? @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String? @db.Text
+  session_state      String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

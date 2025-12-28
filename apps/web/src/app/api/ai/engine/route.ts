@@ -114,7 +114,7 @@ function detectNextPhase(userMessage: string, aiMessage: string, phase: string) 
 }
 
 /* ============================================================
-    TOOLS DEFINITION (יומן + אוטומציה + תשלומים חדש)
+    TOOLS DEFINITION (לא נגעתי)
 ============================================================ */
 const CALENDAR_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -170,7 +170,6 @@ const AUTOMATION_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   }
 };
 
-// --- כלי התשלום החדש ---
 const PAYMENT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
   function: {
@@ -203,15 +202,22 @@ export async function POST(req: Request) {
 
     const knowledgeSummary = buildKnowledgeHint(attachments);
 
-    // --- 1. שליפת חיבורים מה-DB + לינקים לתשלום + לינק לאתר ---
     let activeIntegrations: string[] = [];
     let tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [];
     let paymentLinks: { paybox?: string } = {};
-    let siteLink: string | null = null; // <--- חדש: לינק לאתר
+    let siteLink: string | null = null;
+    let fullKnowledgeBase = ""; // <--- NEW: שדה לידע מה-DB
 
     if (userId) {
         try {
-            // שולפים את החיבורים + Metadata
+            // 1. שליפת ה-businessDescription (המחירון) מהמשתמש
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { businessDescription: true }
+            });
+            fullKnowledgeBase = user?.businessDescription || "";
+
+            // 2. שליפת חיבורים מה-DB
             const connections = await prisma.integrationConnection.findMany({
                 where: { 
                     userId: userId,
@@ -220,16 +226,13 @@ export async function POST(req: Request) {
                 select: { provider: true, metadata: true }
             });
 
-            // המרה ל-String כדי למנוע התנגשויות טיפוסים - התיקון כאן
             activeIntegrations = connections.map(c => c.provider as string);
             
-            // בדיקת PayBox (התיקון: הוספת as string)
             const paybox = connections.find(c => (c.provider as string) === 'PAYBOX');
             if (paybox && paybox.metadata) {
                 paymentLinks.paybox = (paybox.metadata as any).paymentUrl;
             }
 
-            // --- חדש: שליפת לינק לאתר (התיקון: הוספת as string) ---
             const siteConn = connections.find(c => (c.provider as string) === 'SITE_LINK');
             if (siteConn && siteConn.metadata) {
                 siteLink = (siteConn.metadata as any).url;
@@ -238,7 +241,6 @@ export async function POST(req: Request) {
 
             console.log("✅ Active Integrations:", activeIntegrations);
 
-            // הקצאת כלים (כעת משווים מול string)
             if (activeIntegrations.includes('GOOGLE_CALENDAR')) {
                 tools.push(...CALENDAR_TOOLS);
             }
@@ -254,15 +256,17 @@ export async function POST(req: Request) {
         }
     }
 
+    // 3. יצירת הפרומפט (העברת המחירון החדש)
     const systemPrompt = generateSystemPrompt({
       phase,
       businessInfo: "User Context",
       knowledgeSummary,
+      fullKnowledgeBase, // <--- המחירון מועבר כאן
       existingFlow,
       isFreshScan,
       integrations: activeIntegrations,
-      paymentLinks, // העברת לינקים לתשלום
-      siteLink // <--- העברת לינק לאתר לפרומפט
+      paymentLinks, 
+      siteLink 
     });
 
     const currentTimeMsg = `
@@ -284,7 +288,6 @@ export async function POST(req: Request) {
 
     console.log(`→ Sending to Gemini (Phase: ${phase})... Tools count: ${tools.length}`);
 
-    // קריאה ראשונה ל-AI
     let response = await openai.chat.completions.create({
       model: "gemini-2.0-flash-exp",
       messages: messagesForAi,
@@ -297,14 +300,11 @@ export async function POST(req: Request) {
     let aiMessage = response.choices[0]?.message;
     let replyText = aiMessage?.content || "";
 
-    // בדיקת Tools
     if (aiMessage?.tool_calls && aiMessage.tool_calls.length > 0) {
       console.log(`🛠️ [ENGINE] AI wants to use tools: ${aiMessage.tool_calls.length}`);
-      
       messagesForAi.push(aiMessage);
 
       for (const toolCall of aiMessage.tool_calls) {
-        // --- התיקון הקריטי כאן: הוספת cast ל-any ---
         const fnName = (toolCall as any).function.name;
         const args = JSON.parse((toolCall as any).function.arguments);
         let toolResult = "";
@@ -315,7 +315,6 @@ export async function POST(req: Request) {
           if (fnName === "calendar_check_availability" && userId) {
             const slots = await googleCalendarService.listBusySlots(userId, args.start_date, args.end_date);
             toolResult = JSON.stringify({ status: "success", busy_slots: slots });
-            console.log(`   ✅ Calendar: Found ${slots.length} busy slots`);
           } 
           else if (fnName === "calendar_create_event" && userId) {
             const event = await googleCalendarService.createEvent(userId, {
@@ -325,7 +324,6 @@ export async function POST(req: Request) {
               attendeeEmail: args.email
             });
             toolResult = JSON.stringify({ status: "success", event_link: event.link });
-            console.log(`   ✅ Calendar: Event Created!`);
           }
           else if (fnName === "trigger_automation" && userId) {
              const connection = await prisma.integrationConnection.findUnique({
@@ -342,13 +340,10 @@ export async function POST(req: Request) {
              });
              toolResult = JSON.stringify({ status: "success", message: "Automation triggered" });
           }
-          // --- הכלי החדש לתשלומים ---
           else if (fnName === "generate_payment_link") {
-              // כאן תהיה האינטגרציה האמיתית בעתיד. כרגע זה מוק.
               const mockLink = `https://checkout.stripe.com/pay/mock_${Math.random().toString(36).substring(7)}`;
               toolResult = JSON.stringify({ status: "success", payment_link: mockLink });
           }
-
         } catch (err: any) {
           console.error(`   ❌ Tool Error:`, err);
           toolResult = JSON.stringify({ status: "error", message: err.message });
@@ -361,7 +356,6 @@ export async function POST(req: Request) {
         });
       }
 
-      // קריאה חוזרת ל-AI עם התוצאות
       const secondResponse = await openai.chat.completions.create({
         model: "gemini-2.0-flash-exp",
         messages: messagesForAi,
@@ -371,7 +365,6 @@ export async function POST(req: Request) {
       replyText = secondResponse.choices[0]?.message?.content || "";
     }
 
-    // חילוץ JSON וסיום
     let flowJson = null;
     try {
       const raw = extractJsonFromText(replyText);

@@ -4,6 +4,8 @@ interface PromptContext {
   phase: 'intro' | 'build' | 'simulate' | 'connect' | 'publish' | 'edit';
   businessInfo?: string;
   knowledgeSummary?: string;
+  // NEW: שדה לידע מפורט כמו מחירון דגים
+  fullKnowledgeBase?: string; 
   existingFlow?: FlowJson | null;
   isFreshScan?: boolean;
   integrations?: string[];
@@ -12,7 +14,7 @@ interface PromptContext {
 }
 
 export const generateSystemPrompt = (context: PromptContext): string => {
-  const { phase, businessInfo, knowledgeSummary, existingFlow, isFreshScan, integrations = [], paymentLinks = {}, siteLink } = context;
+  const { phase, businessInfo, knowledgeSummary, fullKnowledgeBase, existingFlow, isFreshScan, integrations = [], paymentLinks = {}, siteLink } = context;
 
   const now = new Date();
   const currentDateTime = now.toLocaleString('he-IL', {
@@ -55,6 +57,10 @@ IN SIMULATION: If the tools are NOT connected, you must SIMULATE their success.
    - **CONDITION:** If site link is active (${siteLink ? "YES" : "NO"}).
    - **TRIGGER:** User asks "Where can I see photos?", "Do you have a site?", or needs to fill a form.
    - **ACTION:** Send this link: ${siteLink || "[SITE_LINK_MISSING]"}.
+
+5. **SMART Q&A (NEW):**
+   - **TRIGGER:** User asks a general question about products or prices.
+   - **ACTION:** Use KNOWLEDGE BASE data to answer naturally, then resume the order flow.
 `;
 
   /* ============================================================
@@ -65,11 +71,12 @@ IN SIMULATION: If the tools are NOT connected, you must SIMULATE their success.
   if (phase === 'simulate') {
       // בסימולציה: הבוט של העסק
       baseIdentity = `
-You are the **AI Receptionist** for the business described below.
+You are the **Smart AI Receptionist** for the business described below.
 Current Date & Time: ${currentDateTime}.
 
 Your mission:
 ⭐ Help the customer politely and naturally (Hebrew).
+⭐ **HYBRID INTELLIGENCE:** You follow the JSON flow steps, but if a user asks a question, you answer it using your Knowledge Base and then return to the flow.
 ⭐ **DEMO MODE ACTIVATED:** You must demonstrate a PERFECT flow to the user.
 ⭐ Even if "CALENDAR" is not connected yet -> **PRETEND** it is working.
 ⭐ Always find availability. Always confirm bookings successfully.
@@ -90,7 +97,7 @@ Your mission:
   }
 
   /* ============================================================
-      2) CONVERSATION LOGIC (החלק המלא שחזר)
+      2) CONVERSATION LOGIC
   ============================================================ */
   const conversationLogic = `
 ==========================
@@ -209,6 +216,12 @@ Website Data: ${knowledgeSummary || 'None'}
 **External Site Link:** ${siteLink || 'None'}
 
 ==========================
+📂 SMART KNOWLEDGE BASE (NEW)
+==========================
+Use this for answering user questions:
+${fullKnowledgeBase || 'No pricing/FAQ data provided.'}
+
+==========================
 📂 CURRENT SAVED FLOW (MEMORY)
 ==========================
 ${existingFlowStr}
@@ -216,7 +229,7 @@ ${existingFlowStr}
 `;
 
   /* ============================================================
-      6) PHASE LOGIC (עם התיקון שמונע הפניה לחיבורים)
+      6) PHASE LOGIC 
   ============================================================ */
   let phaseInstructions = '';
 
@@ -270,24 +283,22 @@ ${existingFlowStr}
 
       case 'simulate':
         phaseInstructions = `
-        PHASE: SIMULATE (DEMO / MOCK MODE)
+        PHASE: SIMULATE (SMART AI MODE)
         ===================================
         You are acting as the bot.
         
-        **BEHAVIOR:**
-        1. Act as if all integrations are PERFECTLY connected.
-        2. If user asks for time -> "Checking... Yes, 10:00 is available." (MOCK).
-        3. If user books -> "Great! Booked successfully." (MOCK).
-        4. **PAYMENTS:**
+        **SMART BEHAVIOR:**
+        1. If the user asks a question (e.g., "What's the price?"), answer it using the KNOWLEDGE BASE first.
+        2. Then, gracefully return to the current step in the flow.
+        3. Act as if all integrations are PERFECTLY connected.
+        4. If user asks for time -> "Checking... Yes, 10:00 is available." (MOCK).
+        5. If user books -> "Great! Booked successfully." (MOCK).
+        6. **PAYMENTS:**
            - If PayBox is connected -> Send the link!
            - If Stripe is connected -> Use 'generate_payment_link'.
            - If nothing connected -> Just say "I would send a payment link here."
-        5. **EXTERNAL SITE:**
+        7. **EXTERNAL SITE:**
            - If the user asks for more info/photos -> Send the SITE LINK if available.
-        
-        **GOAL:**
-        Show the user the "Happy Path" of the conversation. 
-        Do NOT mention technical setup or missing connections.
         `;
         break;
 
@@ -325,7 +336,6 @@ ${phaseInstructions}
       `;
   }
 
-  // בשאר השלבים: תן לו את כל המוח של הארכיטקט
   return `
 ${baseIdentity}
 ${conversationLogic}

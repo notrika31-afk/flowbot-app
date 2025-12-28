@@ -22,7 +22,9 @@ import {
   CheckCircle2,
   RefreshCcw,
   Link2,
-  Menu
+  Menu,
+  BrainCircuit,
+  Save
 } from "lucide-react";
 
 /* ---------- Types ---------- */
@@ -169,6 +171,10 @@ export default function BuilderPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [persistentScanData, setPersistentScanData] = useState<any>(null);
   
+  /* ---------- Business Knowledge State (NEW) ---------- */
+  const [businessDescription, setBusinessDescription] = useState("");
+  const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
+
   const endRef = useRef<HTMLDivElement | null>(null);
   const mainContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -191,6 +197,7 @@ export default function BuilderPage() {
     const localFlow = localStorage.getItem("flowbot_draft_flow");
     const localMsgs = localStorage.getItem("flowbot_chat_history");
     const localPhase = localStorage.getItem("flowbot_phase");
+    const localDesc = localStorage.getItem("flowbot_business_desc");
 
     if (localFlow) {
       try {
@@ -206,16 +213,14 @@ export default function BuilderPage() {
       } catch (e) { console.error(e); }
     }
     
-    if (localPhase) {
-        setPhase(localPhase as Phase);
-    }
+    if (localPhase) setPhase(localPhase as Phase);
+    if (localDesc) setBusinessDescription(localDesc);
     
     const justReturned = sessionStorage.getItem("returned_from_connect");
     if (justReturned) {
         sessionStorage.removeItem("returned_from_connect");
         triggerSystemCheck(); 
     }
-
   }, []);
 
   useEffect(() => {
@@ -223,7 +228,8 @@ export default function BuilderPage() {
         localStorage.setItem("flowbot_chat_history", JSON.stringify(msgs));
     }
     localStorage.setItem("flowbot_phase", phase);
-  }, [msgs, phase]);
+    localStorage.setItem("flowbot_business_desc", businessDescription);
+  }, [msgs, phase, businessDescription]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -234,8 +240,6 @@ export default function BuilderPage() {
   async function triggerSystemCheck() {
       setBusy(true);
       try {
-          setMsgs(prev => prev.filter(m => !m.text.includes("מעביר אותך למסך החיבורים")));
-
           const res = await fetch("/api/ai/engine", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -243,7 +247,8 @@ export default function BuilderPage() {
               message: "SYSTEM_CHECK_INTEGRATIONS", 
               history: msgs, 
               phase: phase,
-              currentFlow: flow
+              currentFlow: flow,
+              businessDescription
             }),
           });
           
@@ -263,26 +268,17 @@ export default function BuilderPage() {
     const text = input.trim();
     if (!text || busy || isScanning) return;
 
-    // --- שינוי קריטי: הסרת ההפניה האוטומטית ---
-    // הפניה תתבצע רק אם המשתמש ביקש במפורש
     if (text === "העבר אותי לחיבורים" || text === "אני רוצה לחבר את הבוט" || text === "לחבר") {
         handleConnectRedirect(text);
         return;
     }
-
-    // --- הסרתי את כל הבלוק של "if (flowReady && ...)" שגרם לזריקה החוצה ---
 
     setInput("");
     const newMsgs = [...msgs, { role: "user", text } as Msg];
     setMsgs(newMsgs);
     setBusy(true);
 
-    let phaseForRequest: Phase = phase;
-    if (flowReady) {
-      phaseForRequest = "edit"; // אם הבוט מוכן, כל הודעה היא בקשת עריכה
-    } else {
-      phaseForRequest = phase === "intro" ? "build" : phase;
-    }
+    let phaseForRequest: Phase = flowReady ? "edit" : (phase === "intro" ? "build" : phase);
     setPhase(phaseForRequest);
 
     let currentScanData = null;
@@ -317,8 +313,6 @@ export default function BuilderPage() {
       }
     }
 
-    const attachmentToSend = currentScanData || persistentScanData;
-
     try {
       const res = await fetch("/api/ai/engine", {
         method: "POST",
@@ -326,10 +320,10 @@ export default function BuilderPage() {
         body: JSON.stringify({
           message: text,
           history: newMsgs,
-          sessionId: "local-builder",
           phase: phaseForRequest,
           currentFlow: flow,
-          attachments: attachmentToSend ? [attachmentToSend] : [],
+          businessDescription,
+          attachments: currentScanData || persistentScanData ? [currentScanData || persistentScanData] : [],
           isFreshScan: isFreshScan,
         }),
       });
@@ -337,27 +331,19 @@ export default function BuilderPage() {
       const data = await res.json();
       let reply = (data?.reply as string) || "משהו השתבש רגעית.";
 
-      // מניעת הפניה אוטומטית גם אם השרת מחזיר טריגר
-      if (reply.includes("[CONNECT_TRIGGER]")) {
-          reply = reply.replace("[CONNECT_TRIGGER]", "");
-      }
-      
-      setMsgs((m) => [...m, { role: "bot", text: reply }]);
+      setMsgs((m) => [...m, { role: "bot", text: reply.replace("[CONNECT_TRIGGER]", "") }]);
       
       if (data.flow) {
-        const flowData = data.flow as Flow;
-        setFlow(flowData);
+        setFlow(data.flow);
         setFlowReady(true);
-        localStorage.setItem("flowbot_draft_flow", JSON.stringify(flowData));
-
+        localStorage.setItem("flowbot_draft_flow", JSON.stringify(data.flow));
         setMsgs((m) => [...m, { role: "bot", text: "עדכנתי את התסריט! הסימולציה למטה התעדכנה 👇" }]);
 
         if (!simulateMode) {
             setSimulateMode(true);
             setTimeout(() => {
-                // גלילה חלקה לסימולציה
                 mainContainerRef.current?.scrollTo({ top: mainContainerRef.current.scrollHeight, behavior: 'smooth' });
-            }, 100);
+            }, 300);
         }
       }
 
@@ -371,10 +357,7 @@ export default function BuilderPage() {
 
   function handleConnectRedirect(userText: string) {
       sessionStorage.setItem("returned_from_connect", "true");
-      setInput(""); 
-      setMsgs(prev => [...prev, { role: "user", text: userText }]);
-      setMsgs(prev => [...prev, { role: "bot", text: "מעולה! אני מעביר אותך למסך החיבורים. כשתסיים, פשוט תחזור לכאן ואני אמשיך מהנקודה שעצרנו. 👋" }]);
-      
+      setMsgs(prev => [...prev, { role: "user", text: userText }, { role: "bot", text: "מעולה! אני מעביר אותך למסך החיבורים... 👋" }]);
       setTimeout(() => {
           router.push("/builder/connect");
       }, 1500);
@@ -382,20 +365,12 @@ export default function BuilderPage() {
 
   function resetAll() {
     if(!confirm("האם אתה בטוח שברצונך לאפס הכל?")) return;
-    localStorage.removeItem("flowbot_draft_flow");
-    localStorage.removeItem("flowbot_chat_history");
-    localStorage.removeItem("flowbot_phase");
-    setPersistentScanData(null);
-    setMsgs([{ role: "bot", text: "איפסתי הכל. בוא נתחיל מחדש." }]);
-    setFlow(null);
-    setFlowReady(false);
-    setPhase("intro");
-    setSimulateMode(false);
-    setMobileMenuOpen(false);
+    localStorage.clear();
+    window.location.reload();
   }
 
   /* =========================================================
-   * UI RENDER
+   * UI PARTS (Sidebar, etc.)
    * ======================================================= */
 
   const SidebarContent = () => (
@@ -408,9 +383,7 @@ export default function BuilderPage() {
         
         {!flow ? (
             <div className="text-center py-6">
-                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <Sparkles size={20} className="text-slate-300" />
-                </div>
+                <Sparkles size={20} className="text-slate-300 mx-auto mb-3" />
                 <p className="text-xs text-slate-400">הבוט בשלבי למידה</p>
             </div>
         ) : (
@@ -436,6 +409,14 @@ export default function BuilderPage() {
         )}
         </div>
 
+        {/* New Knowledge Base Side Button */}
+        <SideButton 
+            icon={<BrainCircuit size={14} className="text-purple-500"/>} 
+            onClick={() => { setShowKnowledgeModal(true); setMobileMenuOpen(false); }}
+        >
+            ידע עסקי (AI)
+        </SideButton>
+
         <div className="space-y-2">
             <SideButton icon={<GraduationCap size={14}/>} onClick={() => { setShowGuideModal(true); setMobileMenuOpen(false); }}>מדריך</SideButton>
             <SideButton icon={<FileStack size={14}/>} onClick={() => { setShowTemplatesModal(true); setMobileMenuOpen(false); }}>תבניות</SideButton>
@@ -445,7 +426,7 @@ export default function BuilderPage() {
         {flowReady && (
             <div 
                 onClick={() => handleConnectRedirect("העבר אותי לחיבורים")}
-                className="mt-4 bg-slate-900 text-white py-3.5 rounded-xl text-center text-sm font-bold shadow-lg shadow-slate-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="mt-4 bg-slate-900 text-white py-3.5 rounded-xl text-center text-sm font-bold shadow-lg flex items-center justify-center gap-2 cursor-pointer transition active:scale-95"
             >
                 המשך לחיבורים
                 <ArrowRight size={16} />
@@ -560,7 +541,7 @@ export default function BuilderPage() {
                </div>
             </motion.section>
 
-            {/* 2. Simulation Widget */}
+            {/* 2. Simulation Widget (AI Driven) */}
             <AnimatePresence>
                {simulateMode && flow && (
                   <motion.div
@@ -570,7 +551,7 @@ export default function BuilderPage() {
                      transition={{ duration: 0.5, type: "spring" }}
                      className="scroll-mt-4"
                   >
-                     <SimulationBox flow={flow} onClose={() => setSimulateMode(false)} />
+                     <SmartSimulationBox flow={flow} businessDescription={businessDescription} onClose={() => setSimulateMode(false)} />
                   </motion.div>
                )}
             </AnimatePresence>
@@ -583,25 +564,46 @@ export default function BuilderPage() {
         </div>
       </div>
 
+      {/* Sheets / Modals */}
       <Sheet show={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} title="תפריט בונה">
         <SidebarContent />
       </Sheet>
 
+      <Sheet show={showKnowledgeModal} onClose={() => setShowKnowledgeModal(false)} title="🧠 ידע עסקי (AI Knowledge)">
+         <div className="space-y-4">
+            <p className="text-xs text-slate-500 leading-relaxed">הזן כאן מחירון, אזורי משלוח, שאלות נפוצות או הנחיות מיוחדות. ה-AI ישתמש בזה כדי לענות ללקוחות בסימולציה ובוואטסאפ בצורה חכמה.</p>
+            <textarea 
+               value={businessDescription}
+               onChange={(e) => setBusinessDescription(e.target.value)}
+               placeholder="למשל: סלמון טרי עולה 89 שח לקילו, אנחנו עושים משלוחים לתל אביב בימי שלישי וחמישי..."
+               className="w-full h-44 bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm focus:ring-2 focus:ring-purple-500 outline-none transition resize-none shadow-inner"
+            />
+            <button 
+               onClick={() => { localStorage.setItem("flowbot_business_desc", businessDescription); setShowKnowledgeModal(false); }}
+               className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition shadow-lg shadow-slate-900/20 active:scale-95"
+            >
+               <Save size={16}/> שמור ידע עסקי
+            </button>
+         </div>
+      </Sheet>
+
       <Sheet show={showGuideModal} onClose={() => setShowGuideModal(false)} title="איך זה עובד?">
-         <p className="text-sm text-slate-600 leading-relaxed">
-           1. ספר לבוט על העסק שלך (שם, תחום, שעות).<br/>
-           2. הבוט יבנה עבורך תסריט שיחה.<br/>
-           3. כשהתסריט מוכן, תיפתח סימולציה למטה.<br/>
-           4. שחק עם הסימולציה. אם הכל טוב, לחץ על "המשך לחיבורים".
-         </p>
+         <div className="space-y-3">
+             <p className="text-sm text-slate-600 leading-relaxed">
+               1. <b>ספר לבוט:</b> תן לו מידע כללי על העסק בצאט.<br/>
+               2. <b>בנה תסריט:</b> הבוט ינתח את המידע וייצור זרימת שיחה.<br/>
+               3. <b>הזן ידע:</b> השתמש בכפתור ה-"ידע עסקי" כדי לתת לו מחירון ומידע מפורט.<br/>
+               4. <b>בדוק בסימולציה:</b> וודא שהבוט עונה נכון על הכל.
+             </p>
+         </div>
       </Sheet>
       
       <Sheet show={showTemplatesModal} onClose={() => setShowTemplatesModal(false)} title="תבניות מהירות">
-         <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
-            {['מספרה / תורים', 'מרפאה', 'חנות איקומרס', 'נדל"ן / לידים', 'שירות לקוחות', 'הרשמה לאירוע'].map(t => (
+         <div className="grid grid-cols-2 gap-3 text-xs text-slate-600 pt-2">
+            {['מספרה / תורים', 'מרפאה', 'חנות איקומרס', 'נדל"ן / לידים', 'שירות לקוחות', 'הרשמה'].map(t => (
                <div 
                  key={t} 
-                 className="p-3 border rounded-lg bg-slate-50 text-center hover:bg-slate-100 cursor-pointer active:scale-95 transition"
+                 className="p-3 border border-slate-100 rounded-lg bg-slate-50 text-center hover:bg-slate-100 cursor-pointer active:scale-95 transition font-medium"
                  onClick={() => {
                    setInput(`אני רוצה בוט ל${t}`);
                    setShowTemplatesModal(false);
@@ -614,9 +616,9 @@ export default function BuilderPage() {
       </Sheet>
 
       <Sheet show={showImproveModal} onClose={() => setShowImproveModal(false)} title="שיפור אוטומטי">
-        <div className="text-center p-4">
-             <p className="text-sm text-slate-500 mb-4">המערכת תסרוק את התסריט ותציע שיפורים בניסוח ובמכירה.</p>
-             <button onClick={() => { setInput("תציע שיפורים לתסריט הקיים"); setShowImproveModal(false); sendMsg(); }} className="w-full bg-black text-white py-3 rounded-xl font-bold">הפעל שיפור</button>
+        <div className="text-center p-2">
+             <p className="text-sm text-slate-500 mb-5">המערכת תסרוק את התסריט ותציע שיפורים בניסוח, במכירה וביעילות של הצעדים.</p>
+             <button onClick={() => { setInput("תציע שיפורים לתסריט הקיים"); setShowImproveModal(false); sendMsg(); }} className="w-full bg-black text-white py-3.5 rounded-xl font-bold active:scale-95 transition shadow-lg">הפעל שיפור מבוסס AI</button>
         </div>
       </Sheet>
 
@@ -625,116 +627,81 @@ export default function BuilderPage() {
 }
 
 /* =========================================================
- * SIMULATION BOX
+ * SMART SIMULATION BOX (THE FIX)
  * ======================================================= */
 
-type SimChatMsg = { role: "bot" | "user"; text: string };
-
-function SimulationBox({ flow, onClose }: { flow: Flow; onClose: () => void }) {
-  const [chat, setChat] = useState<SimChatMsg[]>([]);
-  const [variables, setVariables] = useState<Record<string, string>>({});
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+function SmartSimulationBox({ flow, businessDescription, onClose }: { flow: Flow; businessDescription: string, onClose: () => void }) {
+  const [chat, setChat] = useState<{role: 'bot'|'user', text: string}[]>([]);
   const [userInput, setUserInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const steps = flow.steps || [];
-
   useEffect(() => {
-    if (steps.length === 0) return;
-    setChat([]);
-    setVariables({});
-    setCurrentStepIndex(0);
-    setTimeout(() => playStep(steps[0], 0), 500);
+    // אתחול עם ההודעה הראשונה מהתסריט
+    if (flow.steps?.length > 0) {
+        setChat([{ role: "bot", text: flow.steps[0].content || flow.steps[0].title || "שלום! במה אוכל לעזור?" }]);
+    }
   }, [flow]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [chat, isTyping]);
 
-  const formatText = (text: string) => {
-    return text.replace(/\[([a-zA-Z_]+)\]/g, (_, key) => {
-      const v = variables[key] || variables[key.toLowerCase()];
-      return v || (key === 'name' ? 'לקוח יקר' : `[${key}]`);
-    });
-  };
-
-  function playStep(step: StepDef, index: number) {
-    setIsTyping(true);
-    setCurrentStepIndex(index);
-    const msgContent = formatText(step.content || step.title || "...");
-    
-    setTimeout(() => {
-      setIsTyping(false);
-      setChat((prev) => [...prev, { role: "bot", text: msgContent }]);
-    }, 600);
-  }
-
-  // --- לוגיקה חכמה חדשה: דילוג על שאלות אם המידע ידוע ---
-  function findNextSmartStep(currentVars: Record<string, string>, startIndex: number): number {
-    for (let i = startIndex + 1; i < steps.length; i++) {
-        const step = steps[i];
-        
-        // אם לשלב יש משתנה (כמו name או phone)
-        if (step.variable) {
-            const varName = step.variable as string;
-            // אם המשתנה כבר קיים בזיכרון, נדלג על השאלה הזו!
-            if (currentVars[varName]) {
-                continue; 
-            }
-            // אם הוא לא קיים, זו השאלה הבאה שצריך לשאול
-            return i; 
-        }
-        // שלב טקסט רגיל (בלי משתנה) תמיד מוצג
-        return i; 
-    }
-    return -1;
-  }
-
-  function handleUserSend() {
+  async function handleSimSend() {
     const text = userInput.trim();
-    if (!text) return;
+    if (!text || isTyping) return;
 
-    setChat(prev => [...prev, { role: "user", text }]);
     setUserInput("");
+    setChat(prev => [...prev, { role: "user", text }]);
+    setIsTyping(true);
 
-    // עדכון משתנים (זיהוי ישויות)
-    const newVars = { ...variables };
-    const extracted = extractEntities(text);
-    Object.assign(newVars, extracted);
+    try {
+      const res = await fetch("/api/ai/engine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          history: chat.map(c => ({ role: c.role === 'bot' ? 'assistant' : 'user', text: c.text })),
+          phase: "simulate",
+          existingFlow: flow,
+          businessDescription: businessDescription 
+        }),
+      });
 
-    // שמירת תשובה לשאלה הנוכחית
-    const currentStep = steps[currentStepIndex];
-    if (currentStep?.variable && !newVars[currentStep.variable]) {
-        newVars[currentStep.variable] = text;
+      const data = await res.json();
+      if (data.reply) {
+        setChat(prev => [...prev, { role: "bot", text: data.reply }]);
+      }
+    } catch (e) {
+      setChat(prev => [...prev, { role: "bot", text: "⚠️ שגיאת חיבור בסימולציה." }]);
+    } finally {
+      setIsTyping(false);
     }
-
-    setVariables(newVars);
-
-    // חיפוש השלב הבא החכם
-    const nextIdx = findNextSmartStep(newVars, currentStepIndex);
-    if (nextIdx === -1) return; // סוף הבוט
-    playStep(steps[nextIdx], nextIdx);
   }
 
   return (
-    <div className="mt-4 bg-[#efeae2] border border-slate-300 rounded-2xl md:rounded-3xl overflow-hidden shadow-xl w-full mx-auto relative z-10">
+    <div className="mt-4 bg-[#efeae2] border border-slate-300 rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl w-full mx-auto relative z-10 border-b-4">
        <div className="bg-[#075E54] px-4 py-3 flex items-center justify-between text-white shadow-md">
           <div className="flex items-center gap-3">
-             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+             <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shadow-inner">
                 <BotIcon size={18} />
              </div>
              <div>
-                <div className="text-sm font-bold">העסק שלך</div>
-                <div className="text-[10px] opacity-80">מחובר כעת (סימולציה)</div>
+                <div className="text-[15px] font-bold leading-tight">העסק שלך (Live AI)</div>
+                <div className="text-[10px] opacity-80 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                    סימולציה חכמה מחוברת
+                </div>
              </div>
           </div>
-          <button onClick={onClose} className="opacity-70 hover:opacity-100 transition p-1"><X size={20}/></button>
+          <button onClick={onClose} className="opacity-70 hover:opacity-100 transition p-1.5 hover:bg-white/10 rounded-full">
+            <X size={20}/>
+          </button>
        </div>
 
        <div 
-         ref={scrollRef}
-         className="h-[350px] md:h-[400px] overflow-y-auto p-4 space-y-3 bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-repeat"
+         ref={scrollRef} 
+         className="h-[350px] md:h-[400px] overflow-y-auto p-4 space-y-4 bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-repeat"
        >
           {chat.map((m, i) => (
              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -742,16 +709,16 @@ function SimulationBox({ flow, onClose }: { flow: Flow; onClose: () => void }) {
                    ${m.role === "user" ? "bg-[#dcf8c6] text-slate-900 rounded-tr-none" : "bg-white text-slate-900 rounded-tl-none"}
                 `}>
                    {m.text}
-                   <span className="text-[9px] text-slate-400 block text-left mt-1 ml-[-4px]">
+                   <span className="text-[9px] text-slate-400 block text-left mt-1.5 ml-[-4px]">
                       {new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                      {m.role === "user" && <span className="ml-1 inline-block text-blue-400">✓✓</span>}
+                      {m.role === "user" && <span className="ml-1 inline-block text-blue-400 font-bold">✓✓</span>}
                    </span>
                 </div>
              </div>
           ))}
           {isTyping && (
              <div className="flex justify-start">
-                <div className="bg-white px-3 py-2 rounded-lg rounded-tl-none shadow-sm flex gap-1 w-fit">
+                <div className="bg-white px-4 py-2.5 rounded-lg rounded-tl-none shadow-sm flex gap-1 w-fit">
                    <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"/>
                    <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-75"/>
                    <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-150"/>
@@ -760,18 +727,18 @@ function SimulationBox({ flow, onClose }: { flow: Flow; onClose: () => void }) {
           )}
        </div>
 
-       <div className="bg-[#f0f2f5] p-2 flex gap-2 items-center">
+       <div className="bg-[#f0f2f5] p-3 flex gap-2 items-center border-t border-slate-200/50">
           <input 
              value={userInput}
              onChange={e => setUserInput(e.target.value)}
-             onKeyDown={e => e.key === "Enter" && handleUserSend()}
-             className="flex-1 bg-white rounded-full px-4 py-2.5 text-base md:text-sm focus:outline-none border-none shadow-sm"
-             placeholder="הקלד הודעה לבדיקה..."
+             onKeyDown={e => e.key === "Enter" && handleSimSend()}
+             className="flex-1 bg-white rounded-full px-5 py-2.5 text-[15px] md:text-sm focus:outline-none border-none shadow-sm placeholder:text-slate-400"
+             placeholder="שאל אותי משהו מהמחירון..."
           />
           <button 
-             onClick={handleUserSend}
-             disabled={!userInput.trim()}
-             className="w-10 h-10 bg-[#075E54] text-white rounded-full flex items-center justify-center hover:bg-[#054c44] transition disabled:opacity-50 shadow-sm shrink-0"
+             onClick={handleSimSend}
+             disabled={!userInput.trim() || isTyping}
+             className="w-11 h-11 bg-[#075E54] text-white rounded-full flex items-center justify-center hover:bg-[#054c44] transition disabled:opacity-50 shadow-lg active:scale-90 shrink-0"
           >
              <Send size={18} />
           </button>
@@ -781,56 +748,62 @@ function SimulationBox({ flow, onClose }: { flow: Flow; onClose: () => void }) {
 }
 
 /* =========================================================
- * SUB COMPONENTS
+ * SUB COMPONENTS (Fixed & Restored)
  * ======================================================= */
 
-function FlowBotAvatar({ typing = false }: { typing?: boolean }) {
+function FlowBotAvatar() { 
   return (
-    <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white shadow-sm shrink-0">
-       <BotIcon size={16} className={typing ? "animate-pulse" : ""} />
+    <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white shadow-md shrink-0 border border-slate-700">
+       <BotIcon size={16} />
     </div>
-  );
+  ); 
 }
 
-function StatusItem({ label, value }: { label: string, value: string }) {
-   return (
-      <div>
-         <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">{label}</div>
-         <div className="text-sm font-semibold text-slate-800 line-clamp-2">{value}</div>
-      </div>
-   );
+function StatusItem({ label, value }: { label: string, value: string }) { 
+  return (
+    <div className="space-y-0.5">
+       <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{label}</div>
+       <div className="text-sm font-semibold text-slate-800 line-clamp-2 leading-snug">{value}</div>
+    </div>
+  ); 
 }
 
-function SideButton({ icon, children, onClick }: { icon: ReactNode, children: ReactNode, onClick: () => void }) {
-   return (
-      <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition shadow-sm text-right active:scale-[0.98]">
-         <span className="text-slate-400">{icon}</span>
-         {children}
-      </button>
-   );
+function SideButton({ icon, children, onClick }: { icon: ReactNode, children: ReactNode, onClick: () => void }) { 
+  return (
+    <button 
+      onClick={onClick} 
+      className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition shadow-sm text-right active:scale-[0.98]"
+    >
+       <span className="shrink-0">{icon}</span>
+       {children}
+    </button>
+  ); 
 }
 
 function Sheet({ show, onClose, title, children }: { show: boolean, onClose: () => void, title: string, children: ReactNode }) {
   return (
     <AnimatePresence>
       {show && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={onClose}
-        >
-          <motion.div
-            className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 relative"
-            initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+        <>
+          <motion.div 
+            className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          <motion.div 
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[70] bg-white w-[92%] max-w-sm rounded-3xl shadow-2xl p-6 md:p-7"
+            initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-slate-900">{title}</h3>
-              <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full"><X size={18} /></button>
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="font-black text-lg text-slate-900 tracking-tight">{title}</h3>
+              <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-full transition text-slate-400">
+                <X size={20} />
+              </button>
             </div>
             {children}
           </motion.div>
-        </motion.div>
+        </>
       )}
     </AnimatePresence>
   );
