@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth"; 
 
+// ==============================================================================
+// הגדרות אלו מונעות מ-Next.js לנסות להריץ את הקוד בזמן הבנייה
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// ==============================================================================
 
 export async function POST(req: Request) {
   try {
+    // 1. זיהוי המשתמש
     const session = await getUserSession();
     
     if (!session?.id) {
@@ -14,19 +18,17 @@ export async function POST(req: Request) {
     }
 
     const userId = session.id; 
+
     const body = await req.json();
     const { flow, waba, status } = body;
 
-    // --- תיקון 1: וידוא פורמט ה-JSON (למניעת הבעיה בתמונה) ---
-    // אנחנו מוודאים שה-flow נשמר כאובייקט ולא כטקסט, כדי שהסימולציה תעבוד
-    const parsedFlow = typeof flow === 'string' ? JSON.parse(flow) : flow;
-
+    // --- שינוי 1: הסרת החסימה הגורפת ---
+    // במקום לזרוק שגיאה אם אין waba, אנחנו נבדוק את זה בהמשך.
     console.log("🚀 Publishing Bot for user:", userId);
 
-    // 2. שמירת/עדכון הבוט (התסריט)
+    // 2. שמירת/עדכון הבוט (התסריט) - נשאר ללא שינוי
     let bot = await prisma.bot.findFirst({
-        where: { ownerId: userId },
-        orderBy: { updatedAt: 'desc' } // מבטיח שאנחנו על הבוט הנכון
+        where: { ownerId: userId }
     });
 
     if (bot) {
@@ -34,8 +36,7 @@ export async function POST(req: Request) {
         bot = await prisma.bot.update({
             where: { id: bot.id },
             data: {
-                // הגנה: אם parsedFlow ריק (null), אנחנו שומרים על המידע הקיים ב-DB ולא מוחקים אותו
-                flowData: parsedFlow || bot.flowData, 
+                flowData: flow, 
                 publishedAt: new Date(),
                 status: status || 'ACTIVE'
             }
@@ -46,16 +47,20 @@ export async function POST(req: Request) {
             data: {
                 ownerId: userId,
                 name: "My Business Bot",
-                flowData: parsedFlow,
+                flowData: flow,
                 status: status || 'ACTIVE',
                 publishedAt: new Date()
             }
         });
     }
 
-    // 3. טיפול בחיבור הוואטסאפ (הלוגיקה המקורית שלך נשמרה לגמרי)
+    // 3. טיפול בחיבור הוואטסאפ (Logic חדש התומך בשני המצבים)
+
     if (waba && waba.phoneId && waba.token) {
-        // === תרחיש A: פרטים ידנית ===
+        // === תרחיש A: קיבלנו פרטים ידנית (כמו קודם) ===
+        // נשמור או נעדכן אותם בדיוק כמו בקוד המקורי
+        
+        // תיקון: שינוי מ-whatsAppConnection ל-wabaConnection
         const existingConnection = await prisma.wabaConnection.findFirst({
             where: { userId: userId, phoneNumberId: waba.phoneId }
         });
@@ -78,23 +83,27 @@ export async function POST(req: Request) {
                     wabaId: waba.wabaId,
                     accessToken: waba.token,
                     isActive: true,
-                    botId: bot.id,
-                    verifyToken: "flowbot_verify_token" // שדה חובה ב-Schema שלך
+                    botId: bot.id
                 }
             });
         }
 
     } else {
-        // === תרחיש B: חיבור אוטומטי/פייסבוק ===
+        // === תרחיש B: לא קיבלנו פרטים (חיבור אוטומטי/פייסבוק) ===
+        // נחפש אם יש חיבור קיים למשתמש בדאטה-בייס
+        
+        // תיקון: שינוי מ-whatsAppConnection ל-wabaConnection
         const existingConnection = await prisma.wabaConnection.findFirst({
             where: { userId: userId },
-            orderBy: { updatedAt: 'desc' }
+            orderBy: { updatedAt: 'desc' } // לוקחים את החיבור האחרון שהיה פעיל
         });
 
         if (!existingConnection) {
+            // אם אין פרטים ב-Body וגם לא מצאנו כלום בדאטה-בייס -> אז זו שגיאה
             return NextResponse.json({ error: "No WhatsApp connection found. Please connect with Facebook first." }, { status: 400 });
         }
 
+        // אם מצאנו חיבור, רק נקשר אותו לבוט החדש/המעודכן
         await prisma.wabaConnection.update({
             where: { id: existingConnection.id },
             data: {
@@ -107,6 +116,7 @@ export async function POST(req: Request) {
     }
 
     console.log("✅ Bot Published Successfully!");
+
     return NextResponse.json({ success: true, botId: bot.id }, { status: 200 });
 
   } catch (error: any) {
