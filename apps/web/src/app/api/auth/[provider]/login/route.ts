@@ -51,25 +51,31 @@ export async function GET(
     const oAuth2Client = createOAuthClient();
     const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/${cleanProvider}/callback`;
     
-    // מחיקת השורה הבעייתית: oAuth2Client.redirectUri = callbackUrl;
-
     const scopeType = cleanProvider === 'google_sheets' ? 'sheets' : 'calendar';
     
-    // 3. שליחה לגוגל
+    // 3. שליחה לגוגל עם התיקון ל-Incremental Authorization
     const authUrl = oAuth2Client.generateAuthUrl({
         access_type: "offline",
         prompt: "consent",
-        redirect_uri: callbackUrl, // <--- הנה התיקון: מעבירים את הכתובת כאן בפנים
+        redirect_uri: callbackUrl,
+        
+        // ✅ התיקון הקריטי כאן: מאפשר לגוגל לאחד הרשאות קודמות עם החדשות
+        include_granted_scopes: true, 
+        
         scope: scopeType === 'sheets' 
             ? [
+                "openid",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
                 "https://www.googleapis.com/auth/spreadsheets",
-                "https://www.googleapis.com/auth/drive.file",
-                "https://www.googleapis.com/auth/userinfo.email"
+                "https://www.googleapis.com/auth/drive.file"
               ]
             : [
+                "openid",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
                 "https://www.googleapis.com/auth/calendar",
-                "https://www.googleapis.com/auth/calendar.events",
-                "https://www.googleapis.com/auth/userinfo.email"
+                "https://www.googleapis.com/auth/calendar.events"
               ],
         state: user.id 
     });
