@@ -92,6 +92,13 @@ export async function GET(req: Request) {
       });
     }
 
+    // 🚀 תוספת 1: מציאת הבוט הקיים כדי לקשור אותו לחיבור החדש
+    const activeBot = await prisma.bot.findFirst({
+        where: { ownerId: session.id },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true }
+    });
+
     const appId = process.env.FACEBOOK_APP_ID || process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
     const appSecret = process.env.FACEBOOK_APP_SECRET;
     
@@ -163,6 +170,8 @@ export async function GET(req: Request) {
             data: {
                 status: "CONNECTED",
                 accessToken: accessToken,
+                // 🚀 תוספת 2: קישור לבוט הקיים
+                botId: activeBot?.id,
                 metadata: {
                     ...extraMetadata,
                     wabaId: fetchedWabaId,
@@ -179,6 +188,8 @@ export async function GET(req: Request) {
                 provider: FB_PROVIDER, 
                 status: "CONNECTED",
                 accessToken: accessToken,
+                // 🚀 תוספת 3: קישור לבוט הקיים
+                botId: activeBot?.id,
                 metadata: {
                     ...extraMetadata,
                     wabaId: fetchedWabaId,
@@ -205,6 +216,8 @@ export async function GET(req: Request) {
                     wabaId: fetchedWabaId,
                     accessToken: accessToken,
                     isActive: true,
+                    // 🚀 תוספת 4: קישור לבוט הקיים
+                    botId: activeBot?.id,
                     updatedAt: new Date()
                 }
             });
@@ -216,7 +229,10 @@ export async function GET(req: Request) {
                     wabaId: fetchedWabaId,
                     accessToken: accessToken,
                     name: fetchedPhoneName || "My WhatsApp Bot",
-                    isActive: true
+                    isActive: true,
+                    // 🚀 תוספת 5: קישור לבוט הקיים
+                    botId: activeBot?.id,
+                    verifyToken: "flowbot_verify_token"
                 }
             });
         }

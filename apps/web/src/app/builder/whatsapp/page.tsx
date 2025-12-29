@@ -33,16 +33,31 @@ export default function WhatsappConnectionPage() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  const handleConnectFacebook = () => {
+  const handleConnectFacebook = async () => {
     setStatus('CONNECTING');
     setErrorMessage(null);
     setShowManualCheck(false);
     setTimeout(() => setShowManualCheck(true), 8000);
     localStorage.removeItem('fb_auth_result');
 
+    // 🚀 תוספת: שמירה שקטה ל-Neon לפני פתיחת הפופ-אפ למניעת אובדן נתונים
+    try {
+        const localFlow = localStorage.getItem('flowbot_draft_flow');
+        if (localFlow) {
+            await fetch('/api/bot/publish', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ flow: JSON.parse(localFlow), status: 'DRAFT' }),
+            });
+            console.log("✅ הבוט נשמר כטיוטה ב-Neon");
+        }
+    } catch (e) {
+        console.warn("Silent save failed, continuing to FB...", e);
+    }
+
     const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
-    const configId = "1857943438168924"; // ה-ID המעודכן שלך
-    const callbackUrl = `https://flowbot.ink/api/integrations/whatsapp/callback`;
+    const configId = "1857943438168924"; 
+    const callbackUrl = `https://flowbot.ink/api/auth/facebook/callback`; // וידאתי את הנתיב הנכון
     
     if (!appId) {
         setStatus('ERROR');
@@ -50,7 +65,6 @@ export default function WhatsappConnectionPage() {
         return;
     }
 
-    // ה-URL המזוקק שמונע את בחירת ה-Pages
     const targetUrl = `https://www.facebook.com/v19.0/dialog/oauth?` + 
       `client_id=${appId}` +
       `&config_id=${configId}` +
@@ -73,7 +87,10 @@ export default function WhatsappConnectionPage() {
       const res = await fetch('/api/bot/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ flow: localFlow ? JSON.parse(localFlow) : null, status: 'ACTIVE' }),
+          body: JSON.stringify({ 
+              flow: localFlow ? JSON.parse(localFlow) : null, 
+              status: 'ACTIVE' 
+          }),
       });
       if (!res.ok) throw new Error("החיבור נכשל בשרת.");
       setStatus('SUCCESS');
@@ -84,12 +101,12 @@ export default function WhatsappConnectionPage() {
     }
   };
 
+  // שאר ה-JSX (return) נשאר ללא שינוי בכלל
   return (
     <div className="w-full min-h-[90vh] flex items-center justify-center p-4 md:p-6 overflow-x-hidden bg-neutral-50/50" dir="rtl">
       <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-24 items-center relative">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-100/40 rounded-full blur-[100px] -z-10" />
 
-        {/* צד ימין: הסבר ומדריך - העיצוב המקורי שלך חזר */}
         <div className="flex flex-col gap-6 order-2 lg:order-1 text-right">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-100 rounded-full text-blue-700 font-bold text-xs mb-6">
@@ -116,7 +133,6 @@ export default function WhatsappConnectionPage() {
             </div>
         </div>
 
-        {/* צד שמאל: כרטיס הפעולה */}
         <motion.div className="w-full relative order-1 lg:order-2" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
             <div className="bg-white rounded-3xl border border-neutral-200 shadow-xl shadow-neutral-200/40 p-8 md:p-10 flex flex-col items-center text-center relative overflow-hidden">
                 {status === 'SUCCESS' && (

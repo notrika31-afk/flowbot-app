@@ -22,6 +22,9 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { flow, waba, status } = body;
 
+    // --- הוספה 1: הפיכת ה-flow לאובייקט כדי שהסימולציה תעבוד ולא תראה קוד ---
+    const parsedFlow = typeof flow === 'string' ? JSON.parse(flow) : flow;
+
     // --- שינוי 1: הסרת החסימה הגורפת ---
     // במקום לזרוק שגיאה אם אין waba, אנחנו נבדוק את זה בהמשך.
     console.log("🚀 Publishing Bot for user:", userId);
@@ -36,7 +39,8 @@ export async function POST(req: Request) {
         bot = await prisma.bot.update({
             where: { id: bot.id },
             data: {
-                flowData: flow, 
+                // --- הוספה 2: הגנה - אםparsedFlow ריק, לא דורסים את המידע הקיים ב-DB ---
+                flowData: parsedFlow || bot.flowData, 
                 publishedAt: new Date(),
                 status: status || 'ACTIVE'
             }
@@ -47,7 +51,7 @@ export async function POST(req: Request) {
             data: {
                 ownerId: userId,
                 name: "My Business Bot",
-                flowData: flow,
+                flowData: parsedFlow,
                 status: status || 'ACTIVE',
                 publishedAt: new Date()
             }
@@ -83,7 +87,9 @@ export async function POST(req: Request) {
                     wabaId: waba.wabaId,
                     accessToken: waba.token,
                     isActive: true,
-                    botId: bot.id
+                    botId: bot.id,
+                    // --- הוספה 3: חובה ב-Schema שלך כדי למנוע קריסה ביצירה ---
+                    verifyToken: "flowbot_verify_token" 
                 }
             });
         }
