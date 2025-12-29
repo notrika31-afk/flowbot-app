@@ -355,9 +355,27 @@ export default function BuilderPage() {
     }
   }
 
-  function handleConnectRedirect(userText: string) {
+  // 🚀 הפונקציה המעודכנת: מבצעת שמירת טיוטה ל-Neon לפני המעבר
+  async function handleConnectRedirect(userText: string) {
+      if (flow) {
+        try {
+            // שולחים לשרת בקשת שמירה שיוצרת את הבוט ב-DB לפני שעוברים דף
+            await fetch("/api/ai/engine", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "SAVE_DRAFT",
+                    flow: flow,
+                    businessDescription: businessDescription
+                }),
+            });
+        } catch (e) {
+            console.error("Auto-save failed before redirect:", e);
+        }
+      }
+
       sessionStorage.setItem("returned_from_connect", "true");
-      setMsgs(prev => [...prev, { role: "user", text: userText }, { role: "bot", text: "מעולה! אני מעביר אותך למסך החיבורים... 👋" }]);
+      setMsgs(prev => [...prev, { role: "user", text: userText }, { role: "bot", text: "מעולה! אני שומר את הבוט ומעביר אותך למסך החיבורים... 👋" }]);
       setTimeout(() => {
           router.push("/builder/connect");
       }, 1500);
@@ -541,7 +559,7 @@ export default function BuilderPage() {
                </div>
             </motion.section>
 
-            {/* 2. Simulation Widget (AI Driven) */}
+            {/* 2. Simulation Widget (Logic Driven) */}
             <AnimatePresence>
                {simulateMode && flow && (
                   <motion.div
@@ -627,19 +645,21 @@ export default function BuilderPage() {
 }
 
 /* =========================================================
- * SMART SIMULATION BOX (THE FIX)
+ * SMART SIMULATION BOX (FIXED: LOGIC-DRIVEN)
  * ======================================================= */
 
 function SmartSimulationBox({ flow, businessDescription, onClose }: { flow: Flow; businessDescription: string, onClose: () => void }) {
   const [chat, setChat] = useState<{role: 'bot'|'user', text: string}[]>([]);
   const [userInput, setUserInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    // אתחול עם ההודעה הראשונה מהתסריט
-    if (flow.steps?.length > 0) {
-        setChat([{ role: "bot", text: flow.steps[0].content || flow.steps[0].title || "שלום! במה אוכל לעזור?" }]);
+    if (flow.steps?.length > 0 && chat.length === 0) {
+        const firstStep = flow.steps[0];
+        setChat([{ role: "bot", text: firstStep.content || firstStep.title || "שלום! במה אוכל לעזור?" }]);
+        setCurrentStepIndex(0);
     }
   }, [flow]);
 
@@ -656,6 +676,18 @@ function SmartSimulationBox({ flow, businessDescription, onClose }: { flow: Flow
     setIsTyping(true);
 
     try {
+      const nextStepIndex = currentStepIndex + 1;
+
+      if (nextStepIndex < flow.steps.length) {
+        setTimeout(() => {
+          const nextStep = flow.steps[nextStepIndex];
+          setChat(prev => [...prev, { role: "bot", text: nextStep.content || nextStep.title || "" }]);
+          setCurrentStepIndex(nextStepIndex);
+          setIsTyping(false);
+        }, 800);
+        return;
+      }
+
       const res = await fetch("/api/ai/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -675,7 +707,9 @@ function SmartSimulationBox({ flow, businessDescription, onClose }: { flow: Flow
     } catch (e) {
       setChat(prev => [...prev, { role: "bot", text: "⚠️ שגיאת חיבור בסימולציה." }]);
     } finally {
-      setIsTyping(false);
+      if (currentStepIndex >= flow.steps.length - 1) {
+          setIsTyping(false);
+      }
     }
   }
 
@@ -687,14 +721,13 @@ function SmartSimulationBox({ flow, businessDescription, onClose }: { flow: Flow
                 <BotIcon size={18} />
              </div>
              <div>
-                <div className="text-[15px] font-bold leading-tight">העסק שלך (Live AI)</div>
+                <div className="text-[15px] font-bold leading-tight">סימולטור תזרים: {flow.goal}</div>
                 <div className="text-[10px] opacity-80 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-                    סימולציה חכמה מחוברת
+                    שלב {currentStepIndex + 1} מתוך {flow.steps.length}
                 </div>
              </div>
           </div>
-          <button onClick={onClose} className="opacity-70 hover:opacity-100 transition p-1.5 hover:bg-white/10 rounded-full">
+          <button onClick={() => { setChat([]); setCurrentStepIndex(0); onClose(); }} className="opacity-70 hover:opacity-100 transition p-1.5 hover:bg-white/10 rounded-full">
             <X size={20}/>
           </button>
        </div>
@@ -733,7 +766,7 @@ function SmartSimulationBox({ flow, businessDescription, onClose }: { flow: Flow
              onChange={e => setUserInput(e.target.value)}
              onKeyDown={e => e.key === "Enter" && handleSimSend()}
              className="flex-1 bg-white rounded-full px-5 py-2.5 text-[15px] md:text-sm focus:outline-none border-none shadow-sm placeholder:text-slate-400"
-             placeholder="שאל אותי משהו מהמחירון..."
+             placeholder="הקלד תשובה לבוט..."
           />
           <button 
              onClick={handleSimSend}
@@ -746,10 +779,6 @@ function SmartSimulationBox({ flow, businessDescription, onClose }: { flow: Flow
     </div>
   );
 }
-
-/* =========================================================
- * SUB COMPONENTS (Fixed & Restored)
- * ======================================================= */
 
 function FlowBotAvatar() { 
   return (

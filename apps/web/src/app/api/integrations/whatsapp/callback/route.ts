@@ -13,7 +13,15 @@ export async function GET(req: Request) {
     if (!session?.id) return new Response("Unauthorized", { status: 401 });
     if (!code) return new Response("No code provided", { status: 400 });
 
-    // 1. החלפת קוד בטוקן
+    // 🚀 תוספת: חיפוש הבוט האחרון שהמשתמש יצר ב-DB
+    // זה מבטיח שהוואטסאפ יתחבר לבוט שבנית ולא ייצור משהו חדש וריק
+    const activeBot = await prisma.bot.findFirst({
+      where: { ownerId: session.id },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true }
+    });
+
+    // 1. החלפת קוד בטוקן (הלוגיקה המקורית שלך)
     const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?` +
       `client_id=${process.env.NEXT_PUBLIC_FACEBOOK_APP_ID}` +
       `&client_secret=${process.env.FACEBOOK_APP_SECRET}` +
@@ -26,8 +34,7 @@ export async function GET(req: Request) {
     if (tokenData.error) throw new Error(tokenData.error.message);
     const accessToken = tokenData.access_token;
 
-    // 2. שליפת ה-Phone Number ID (כדי שהמספר באמת יתחבר)
-    // אנחנו שואלים את פייסבוק: "איזה מספרי טלפון יש בחשבון הזה?"
+    // 2. שליפת ה-Phone Number ID (הלוגיקה המקורית שלך)
     const wabaId = searchParams.get("whatsapp_business_account_id");
     let phoneNumberId = "";
 
@@ -37,17 +44,18 @@ export async function GET(req: Request) {
         );
         const phoneData = await phoneRes.json();
         if (phoneData.data && phoneData.data.length > 0) {
-            phoneNumberId = phoneData.data[0].id; // לוקחים את המספר הראשון שמחובר
+            phoneNumberId = phoneData.data[0].id; 
         }
     }
 
-    // 3. שמירה ב-DB - מעדכנים גם את ה-wabaId וגם את ה-phoneNumberId
+    // 3. שמירה ב-DB (שימוש ב-Upsert המקורי שלך עם שדה botId)
     await prisma.wabaConnection.upsert({
         where: { userId: session.id },
         update: { 
             accessToken, 
             wabaId: wabaId || "", 
-            phoneNumberId: phoneNumberId, // חשוב לחיבור הממשי
+            phoneNumberId: phoneNumberId,
+            botId: activeBot?.id, // 🚀 הוספה: מצמיד לבוט הקיים
             isActive: true 
         },
         create: { 
@@ -55,16 +63,17 @@ export async function GET(req: Request) {
             wabaId: wabaId || "", 
             phoneNumberId: phoneNumberId,
             accessToken, 
+            botId: activeBot?.id, // 🚀 הוספה: מצמיד לבוט הקיים
             verifyToken: "flowbot_verify_token", 
             isActive: true 
         }
     });
 
-    // 4. HTML מאובטח לסגירת החלון (מונע מסך לבן)
+    // 4. HTML מאובטח לסגירת החלון (הלוגיקה המקורית שלך)
     const html = `
       <html>
         <body style="background:#f8fafc;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;margin:0;">
-          <div style="text-align:center;padding:20px;background:white;border-radius:16px;shadow:0 4px 6px -1px rgb(0 0 0 / 0.1);">
+          <div style="text-align:center;padding:20px;background:white;border-radius:16px;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1);">
             <div style="color:#22c55e;font-size:48px;margin-bottom:10px;">✓</div>
             <h2 style="color:#1e293b;margin:0 0 10px 0;">החיבור הצליח!</h2>
             <p style="color:#64748b;margin:0;">החלון ייסגר כעת...</p>
