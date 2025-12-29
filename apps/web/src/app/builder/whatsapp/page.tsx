@@ -40,7 +40,7 @@ export default function WhatsappConnectionPage() {
     setTimeout(() => setShowManualCheck(true), 8000);
     localStorage.removeItem('fb_auth_result');
 
-    // 🚀 תוספת: שמירה שקטה ל-Neon לפני פתיחת הפופ-אפ למניעת אובדן נתונים
+    // 🚀 שמירה שקטה ל-Neon לפני פתיחת הפופ-אפ
     try {
         const localFlow = localStorage.getItem('flowbot_draft_flow');
         if (localFlow) {
@@ -57,7 +57,9 @@ export default function WhatsappConnectionPage() {
 
     const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
     const configId = "1857943438168924"; 
-    const callbackUrl = `https://flowbot.ink/api/auth/facebook/callback`; // וידאתי את הנתיב הנכון
+    
+    // 🔥 עדכון הכתובת לנתיב החדש של הוואטסאפ (זה מה שפותר את החסימה)
+    const callbackUrl = `https://flowbot.ink/api/integrations/whatsapp/callback`; 
     
     if (!appId) {
         setStatus('ERROR');
@@ -101,7 +103,6 @@ export default function WhatsappConnectionPage() {
     }
   };
 
-  // שאר ה-JSX (return) נשאר ללא שינוי בכלל
   return (
     <div className="w-full min-h-[90vh] flex items-center justify-center p-4 md:p-6 overflow-x-hidden bg-neutral-50/50" dir="rtl">
       <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-24 items-center relative">
