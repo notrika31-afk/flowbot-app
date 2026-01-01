@@ -41,19 +41,24 @@ export async function GET(req: Request) {
     const accessToken = tokenData.access_token;
 
     // 2. שליפת ה-Phone Number ID (הלוגיקה המקורית שלך - ללא שינוי)
+   // 2. שליפת ה-Phone Number ID - לוגיקה משופרת
     const wabaId = searchParams.get("whatsapp_business_account_id");
     let phoneNumberId = "";
 
-    if (wabaId) {
+    if (wabaId && accessToken) {
+        // אנחנו מנסים למשוך את כל המספרים המשויכים לחשבון הזה
         const phoneRes = await fetch(
             `https://graph.facebook.com/v19.0/${wabaId}/phone_numbers?access_token=${accessToken}`
         );
         const phoneData = await phoneRes.json();
+        
+        console.log("Meta Phone Data:", JSON.stringify(phoneData)); // לוג לבדיקה
+
         if (phoneData.data && phoneData.data.length > 0) {
+            // לוקח את המספר הראשון ברשימה שהוא מאומת
             phoneNumberId = phoneData.data[0].id; 
         }
     }
-
     // 3. שמירה ב-DB (מצמידה את הוואטסאפ לבוט האמיתי שמצאנו)
     await prisma.wabaConnection.upsert({
         where: { userId: session.id },
