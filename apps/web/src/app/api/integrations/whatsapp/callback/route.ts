@@ -13,15 +13,18 @@ export async function GET(req: Request) {
     if (!session?.id) return new Response("Unauthorized", { status: 401 });
     if (!code) return new Response("No code provided", { status: 400 });
 
-    // 🚀 תוספת: חיפוש הבוט האחרון שהמשתמש יצר ב-DB
-    // זה מבטיח שהוואטסאפ יתחבר לבוט שבנית ולא ייצור משהו חדש וריק
+    // 🚀 התיקון המדויק: מחפש בוט של המשתמש שבו ה-flowData אינו null
+    // זה מבטיח שהוואטסאפ יתחבר לבוט המושקע שלך ולא לבוט ריק שנפתח בטעות
     const activeBot = await prisma.bot.findFirst({
-      where: { ownerId: session.id },
+      where: { 
+        ownerId: session.id,
+        flowData: { not: null } // <--- זה ה"נועל" שמוודא שזה בוט עם תוכן
+      },
       orderBy: { updatedAt: "desc" },
       select: { id: true }
     });
 
-    // 1. החלפת קוד בטוקן (הלוגיקה המקורית שלך)
+    // 1. החלפת קוד בטוקן (הלוגיקה המקורית שלך - ללא שינוי)
     const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?` +
       `client_id=${process.env.NEXT_PUBLIC_FACEBOOK_APP_ID}` +
       `&client_secret=${process.env.FACEBOOK_APP_SECRET}` +
@@ -34,7 +37,7 @@ export async function GET(req: Request) {
     if (tokenData.error) throw new Error(tokenData.error.message);
     const accessToken = tokenData.access_token;
 
-    // 2. שליפת ה-Phone Number ID (הלוגיקה המקורית שלך)
+    // 2. שליפת ה-Phone Number ID (הלוגיקה המקורית שלך - ללא שינוי)
     const wabaId = searchParams.get("whatsapp_business_account_id");
     let phoneNumberId = "";
 
@@ -48,14 +51,14 @@ export async function GET(req: Request) {
         }
     }
 
-    // 3. שמירה ב-DB (שימוש ב-Upsert המקורי שלך עם שדה botId)
+    // 3. שמירה ב-DB (הלוגיקה המקורית שלך - מצמידה לבוט הקיים עם התוכן)
     await prisma.wabaConnection.upsert({
         where: { userId: session.id },
         update: { 
             accessToken, 
             wabaId: wabaId || "", 
             phoneNumberId: phoneNumberId,
-            botId: activeBot?.id, // 🚀 הוספה: מצמיד לבוט הקיים
+            botId: activeBot?.id, 
             isActive: true 
         },
         create: { 
@@ -63,13 +66,13 @@ export async function GET(req: Request) {
             wabaId: wabaId || "", 
             phoneNumberId: phoneNumberId,
             accessToken, 
-            botId: activeBot?.id, // 🚀 הוספה: מצמיד לבוט הקיים
+            botId: activeBot?.id, 
             verifyToken: "flowbot_verify_token", 
             isActive: true 
         }
     });
 
-    // 4. HTML מאובטח לסגירת החלון (הלוגיקה המקורית שלך)
+    // 4. HTML מאובטח לסגירת החלון (הלוגיקה המקורית שלך - ללא שינוי)
     const html = `
       <html>
         <body style="background:#f8fafc;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;margin:0;">
