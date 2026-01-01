@@ -13,12 +13,15 @@ export async function GET(req: Request) {
     if (!session?.id) return new Response("Unauthorized", { status: 401 });
     if (!code) return new Response("No code provided", { status: 400 });
 
-    // 🚀 התיקון המדויק: מחפש בוט של המשתמש שבו ה-flowData אינו null
-    // זה מבטיח שהוואטסאפ יתחבר לבוט המושקע שלך ולא לבוט ריק שנפתח בטעות
+    // 🚀 התיקון הקריטי: מחפש בוט שאינו null וגם אינו אובייקט ריק {}
+    // זה מונע מהמערכת "להינעל" על בוטים ריקים שנוצרו בטעות
     const activeBot = await prisma.bot.findFirst({
       where: { 
         ownerId: session.id,
-        flowData: { not: null } // <--- זה ה"נועל" שמוודא שזה בוט עם תוכן
+        AND: [
+          { flowData: { not: null } },
+          { flowData: { not: "{}" as any } } 
+        ]
       },
       orderBy: { updatedAt: "desc" },
       select: { id: true }
@@ -51,14 +54,14 @@ export async function GET(req: Request) {
         }
     }
 
-    // 3. שמירה ב-DB (הלוגיקה המקורית שלך - מצמידה לבוט הקיים עם התוכן)
+    // 3. שמירה ב-DB (מצמידה את הוואטסאפ לבוט האמיתי שמצאנו)
     await prisma.wabaConnection.upsert({
         where: { userId: session.id },
         update: { 
             accessToken, 
             wabaId: wabaId || "", 
             phoneNumberId: phoneNumberId,
-            botId: activeBot?.id, 
+            botId: activeBot?.id, // הצמדה לבוט הקיים עם התוכן
             isActive: true 
         },
         create: { 
@@ -72,7 +75,7 @@ export async function GET(req: Request) {
         }
     });
 
-    // 4. HTML מאובטח לסגירת החלון (הלוגיקה המקורית שלך - ללא שינוי)
+    // 4. HTML משופר (תיקון סגירת הפופאפ)
     const html = `
       <html>
         <body style="background:#f8fafc;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;margin:0;">
@@ -87,10 +90,13 @@ export async function GET(req: Request) {
             
             if (window.opener) {
               window.opener.postMessage(result, "https://flowbot.ink");
-              setTimeout(() => { window.close(); }, 1000);
+              // סגירה מהירה וודאית
+              setTimeout(() => { window.close(); }, 800);
             } else {
               window.location.href = "/builder/whatsapp";
             }
+            // Fallback לסגירה אם משהו נתקע
+            setTimeout(() => { window.close(); }, 2000);
           </script>
         </body>
       </html>
