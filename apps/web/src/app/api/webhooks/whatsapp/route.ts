@@ -64,32 +64,35 @@ export async function POST(req: Request) {
     const userPhone = message.from;
     const incomingText = message.text?.body;
 
-    // 2. שמירת ההודעה הנכנסת ב-DB עם direction: "INBOUND"
+    // 2. שמירת ההודעה הנכנסת - שימוש ב-type במקום role לפי ה-Schema שלך
     await prisma.message.create({
       data: {
         content: incomingText,
-        role: "user",
         conversationId: userPhone,
         botId: connection.botId,
-        direction: "INBOUND" // הוספנו כדי למנוע את השגיאה
+        direction: "INBOUND",
+        type: "TEXT" 
       }
     });
 
-    // 3. שליפת היסטוריית השיחה (6 הודעות אחרונות)
+    // 3. שליפת היסטוריית השיחה
     const history = await prisma.message.findMany({
       where: { conversationId: userPhone },
       orderBy: { createdAt: "asc" },
       take: 6
     });
 
-    // 4. פנייה ל-AI עם ההיסטוריה המלאה
+    // 4. פנייה ל-AI עם ההיסטוריה (כאן אנחנו מתרגמים ל-role עבור מנוע ה-AI)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get("host")}`;
     const aiResponse = await fetch(`${baseUrl}/api/ai/engine`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: incomingText,
-        history: history.map(h => ({ role: h.role, content: h.content })),
+        history: history.map(h => ({ 
+          role: h.direction === "INBOUND" ? "user" : "assistant", 
+          content: h.content 
+        })),
         phase: "simulate",
         existingFlow: connection.bot.flowData,
         userId: connection.userId,
@@ -119,14 +122,14 @@ export async function POST(req: Request) {
       }
     }
 
-    // 6. שמירת תגובת הבוט ב-DB עם direction: "OUTBOUND"
+    // 6. שמירת תגובת הבוט ב-DB
     await prisma.message.create({
       data: {
         content: finalReply,
-        role: "assistant",
         conversationId: userPhone,
         botId: connection.botId,
-        direction: "OUTBOUND" // הוספנו כדי למנוע את השגיאה
+        direction: "OUTBOUND",
+        type: "TEXT"
       }
     });
 
