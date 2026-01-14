@@ -64,17 +64,18 @@ export async function POST(req: Request) {
     const userPhone = message.from;
     const incomingText = message.text?.body;
 
-    // 2. שמירת ההודעה הנכנסת ב-DB (כדי שיהיה זיכרון)
+    // 2. שמירת ההודעה הנכנסת ב-DB עם direction: "INBOUND"
     await prisma.message.create({
       data: {
         content: incomingText,
         role: "user",
         conversationId: userPhone,
-        botId: connection.botId
+        botId: connection.botId,
+        direction: "INBOUND" // הוספנו כדי למנוע את השגיאה
       }
     });
 
-    // 3. שליפת היסטוריית השיחה (5 הודעות אחרונות)
+    // 3. שליפת היסטוריית השיחה (6 הודעות אחרונות)
     const history = await prisma.message.findMany({
       where: { conversationId: userPhone },
       orderBy: { createdAt: "asc" },
@@ -118,13 +119,14 @@ export async function POST(req: Request) {
       }
     }
 
-    // 6. שמירת תגובת הבוט ב-DB
+    // 6. שמירת תגובת הבוט ב-DB עם direction: "OUTBOUND"
     await prisma.message.create({
       data: {
         content: finalReply,
         role: "assistant",
         conversationId: userPhone,
-        botId: connection.botId
+        botId: connection.botId,
+        direction: "OUTBOUND" // הוספנו כדי למנוע את השגיאה
       }
     });
 
