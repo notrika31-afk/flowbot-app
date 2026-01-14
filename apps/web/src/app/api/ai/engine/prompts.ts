@@ -28,6 +28,19 @@ export const generateSystemPrompt = (context: PromptContext): string => {
     : "NO FLOW YET.";
 
   /* ============================================================
+      🧠 CONTEXTUAL MEMORY & SESSION RULES (NEW)
+  ============================================================ */
+  const memoryRules = `
+==========================
+🧠 CONTEXTUAL MEMORY & SESSION RULES
+==========================
+- **TIMESTAMP AWARENESS:** Always use the Current Date & Time (${currentDateTime}) as your reference point. 
+- **SESSION DISTINCTION:** Treat each new user intent as a fresh request. If the message history shows a booking made "yesterday" or in a previous session, recognize it as a past event. 
+- **MULTIPLE BOOKINGS:** If a user has already booked and now asks for "another appointment" or "a different time," do NOT get stuck on the old booking. Initiate a NEW tool call for the new request.
+- **HISTORY VS CURRENT INTENT:** Message history is for context only. Current user messages override previous states. If the user provides a new date/time, it is a NEW event unless they explicitly ask to "change" or "cancel" the previous one.
+`;
+
+  /* ============================================================
       0) TOOL PROTOCOLS (מעודכן: תמיכה ביומן ובשיטס)
   ============================================================ */
   const toolProtocols = `
@@ -83,6 +96,7 @@ Current Date & Time: ${currentDateTime}.
 Your mission:
 ⭐ Help the customer politely and naturally (Hebrew).
 ⭐ **HYBRID INTELLIGENCE:** You follow the JSON flow steps, but if a user asks a question, you answer it using your Knowledge Base and then return to the flow.
+⭐ **CONTEXT AWARENESS:** Use the message history to understand if this is a repeat customer, but always allow for new bookings/actions.
 ⭐ **DEMO MODE ACTIVATED:** You must demonstrate a PERFECT flow to the user.
 ⭐ Even if "CALENDAR" or "SHEETS" are not connected yet -> **PRETEND** they are working.
 ⭐ Always find availability. Always confirm bookings and data logging successfully.
@@ -261,7 +275,7 @@ ${existingFlowStr}
         **SYSTEM EVENT: SYSTEM_CHECK_INTEGRATIONS**
         - If you see "SYSTEM_CHECK_INTEGRATIONS":
         - Do NOT restart discovery.
-        - Say: "ראיתי שחזרת! האם תרצה שנמשיך בבניית התסריט או שנעבור לסימולציה?"
+        - Say: "ראיתי שחזרת! האם תרצה שנממיך בבניית התסריט או שנעבור לסימולציה?"
         `;
         break;
 
@@ -336,6 +350,7 @@ ${existingFlowStr}
   if (phase === 'simulate') {
       return `
 ${baseIdentity}
+${memoryRules}
 ${toolProtocols}
 ${businessTypeModule}
 ${knowledgeBlock}
@@ -345,6 +360,7 @@ ${phaseInstructions}
 
   return `
 ${baseIdentity}
+${memoryRules}
 ${conversationLogic}
 ${jsonRules}
 ${businessTypeModule}

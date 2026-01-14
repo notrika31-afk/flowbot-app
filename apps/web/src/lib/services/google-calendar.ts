@@ -101,39 +101,50 @@ export const googleCalendarService = {
     return newCal.data.id;
   },
 
-  // --- 3. בדיקת זמינות (בודק בראשי + ביומן הבוט) ---
+  // --- 3. בדיקת זמינות (מעודכן: בודק בראשי + ביומן הבוט יחד) ---
   async listBusySlots(userId: string, timeMin: string, timeMax: string) {
     const auth = await this.getAuthClient(userId);
     const calendar = google.calendar({ version: "v3", auth });
+    
+    // משיגים את ה-ID של יומן הבוט כדי לבדוק גם אותו
+    const botCalendarId = await this.getOrCreateBotCalendarId(auth);
 
-    // אנחנו בודקים את ה-Primary כדי לא להתנגש עם החיים האישיים
     const response = await calendar.freebusy.query({
       requestBody: {
         timeMin,
         timeMax,
         timeZone: "Asia/Jerusalem",
-        items: [{ id: "primary" }] 
-        // הערה: אם רוצים לדייק, אפשר להוסיף כאן גם את יומן הבוט, 
-        // אבל בדרך כלל גוגל מסנכרן את הראשי עם הכל.
+        items: [
+          { id: "primary" }, 
+          { id: botCalendarId }
+        ] 
       }
     });
 
-    const busyIntervals = response.data.calendars?.["primary"]?.busy || [];
+    // איחוד כל הזמנים התפוסים משני היומנים
+    const primaryBusy = response.data.calendars?.["primary"]?.busy || [];
+    const botBusy = response.data.calendars?.[botCalendarId]?.busy || [];
+    const allBusy = [...primaryBusy, ...botBusy];
 
-    return busyIntervals.map((slot) => ({
+    return allBusy.map((slot) => ({
       start: slot.start,
       end: slot.end,
       status: "busy",
     }));
   },
 
-  // --- 4. יצירת אירוע (ביומן הייעודי) ---
+  // --- 4. יצירת אירוע (מעודכן: הגנה מפני זמן סיום חסר) ---
   async createEvent(userId: string, params: CreateEventParams) {
     const auth = await this.getAuthClient(userId);
     const calendar = google.calendar({ version: "v3", auth });
 
-    // שלב קריטי: משיגים את ה-ID של יומן הבוט (או יוצרים אותו)
     const targetCalendarId = await this.getOrCreateBotCalendarId(auth);
+
+    // וידוא שזמן הסיום הוא לפחות שעה אחרי ההתחלה (למנוע שגיאות של גוגל)
+    let endDateTime = params.endTime;
+    if (params.startTime === params.endTime) {
+       endDateTime = new Date(new Date(params.startTime).getTime() + 60 * 60 * 1000).toISOString();
+    }
 
     const event = {
       summary: params.summary,
@@ -143,18 +154,18 @@ export const googleCalendarService = {
         timeZone: "Asia/Jerusalem",
       },
       end: {
-        dateTime: params.endTime,
+        dateTime: endDateTime,
         timeZone: "Asia/Jerusalem",
       },
       attendees: params.attendeeEmail ? [{ email: params.attendeeEmail }] : [],
     };
 
     const response = await calendar.events.insert({
-      calendarId: targetCalendarId, // כותבים ליומן החדש!
+      calendarId: targetCalendarId, 
       requestBody: event,
     });
 
-    console.log(`[Google Service] Event created in '${BOT_CALENDAR_NAME}': ${response.data.htmlLink}`);
+    console.log(`[Google Service] Event created successfully in '${BOT_CALENDAR_NAME}'`);
     
     return {
       id: response.data.id,

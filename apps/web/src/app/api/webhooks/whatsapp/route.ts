@@ -20,13 +20,16 @@ async function sendDirectWhatsApp(phoneId: string, token: string, to: string, te
 }
 
 async function createGoogleCalendarEvent(accessToken: string, eventData: any) {
-  const { date, time, name, service } = eventData;
-  const startDateTime = `${date}T${time}:00Z`;
+  const { date, time, name, service, start_time, summary } = eventData;
+  // תמיכה גם בפורמט הישן וגם בפורמט ISO שה-AI החדש שולח
+  const startDateTime = start_time || `${date}T${time}:00Z`;
+  const eventSummary = summary || `${service}: ${name}`;
+  
   return fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      summary: `${service}: ${name}`,
+      summary: eventSummary,
       start: { dateTime: startDateTime },
       end: { dateTime: new Date(new Date(startDateTime).getTime() + 60 * 60 * 1000).toISOString() },
     }),
@@ -84,11 +87,11 @@ export async function POST(req: Request) {
       },
     });
 
-    // 3. שליפת היסטוריית השיחה (לפני שמירת ההודעה הנוכחית כדי למנוע כפילות ב-AI)
+    // 3. שליפת היסטוריית השיחה - הגדלנו ל-12 הודעות לזיכרון טוב יותר בין ימים
     const pastMessages = await prisma.message.findMany({
       where: { contactId: contact.id },
       orderBy: { createdAt: "asc" },
-      take: 8
+      take: 12
     });
 
     // 4. שמירת ההודעה הנכנסת (INCOMING, TEXT)
@@ -104,6 +107,10 @@ export async function POST(req: Request) {
 
     // 5. פנייה ל-AI Engine עם ההיסטוריה וההודעה הנוכחית
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get("host")}`;
+    
+    // הוספת זמן נוכחי כדי שהבוט ידע להבדיל בין "היום" ל"אתמול"
+    const timestamp = new Date().toISOString();
+
     const aiResponse = await fetch(`${baseUrl}/api/ai/engine`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -111,11 +118,13 @@ export async function POST(req: Request) {
         message: incomingText,
         history: pastMessages.map(h => ({ 
           role: h.direction === "INCOMING" ? "user" : "assistant", 
-          content: h.content 
+          content: h.content,
+          timestamp: h.createdAt // הוספת זמן לכל הודעה בהיסטוריה
         })),
         phase: "simulate",
         existingFlow: connection.bot.flowData,
         userId: connection.userId,
+        currentTime: timestamp
       }),
     });
 
@@ -140,7 +149,7 @@ export async function POST(req: Request) {
     );
 
     if (googleInteg?.accessToken) {
-      // ביצוע קלנדר אם יש פקודה
+      // ביצוע קלנדר אם יש פקודה (Regex תומך גם ב-Tool Calls אם הם מוחזרים כטקסט)
       const calendarMatch = finalReply.match(/\[CREATE_CALENDAR_EVENT: (.*?)\]/);
       if (calendarMatch) {
         try {
