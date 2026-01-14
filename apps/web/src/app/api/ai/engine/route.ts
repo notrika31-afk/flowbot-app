@@ -1,4 +1,4 @@
-// force update 10 - Diagnostic Edition (Calendar + Sheets + FULL LOGS)
+// force update 11 - Final Transactional Force (Calendar + Sheets + Required Tool Choice)
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { generateSystemPrompt } from './prompts'; 
@@ -320,7 +320,8 @@ export async function POST(req: Request) {
       temperature: 0.2,
       max_tokens: 8000,
       tools: tools.length > 0 ? tools : undefined,
-      tool_choice: "auto"
+      // כפייה על המודל להשתמש בכלי אם יש אינטגרציות מחוברות
+      tool_choice: tools.length > 0 ? "required" : "none"
     });
 
     let aiMessage = response.choices[0]?.message;
