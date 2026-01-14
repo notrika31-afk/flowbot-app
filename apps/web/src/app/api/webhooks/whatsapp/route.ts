@@ -84,7 +84,14 @@ export async function POST(req: Request) {
       },
     });
 
-    // 3. שמירת ההודעה הנכנסת (INCOMING, TEXT)
+    // 3. שליפת היסטוריית השיחה (לפני שמירת ההודעה הנוכחית כדי למנוע כפילות ב-AI)
+    const pastMessages = await prisma.message.findMany({
+      where: { contactId: contact.id },
+      orderBy: { createdAt: "asc" },
+      take: 8
+    });
+
+    // 4. שמירת ההודעה הנכנסת (INCOMING, TEXT)
     await prisma.message.create({
       data: {
         content: incomingText,
@@ -95,14 +102,7 @@ export async function POST(req: Request) {
       }
     });
 
-    // 4. שליפת היסטוריית השיחה (כדי שהבוט יזכור)
-    const pastMessages = await prisma.message.findMany({
-      where: { contactId: contact.id },
-      orderBy: { createdAt: "asc" },
-      take: 8
-    });
-
-    // 5. פנייה ל-AI Engine
+    // 5. פנייה ל-AI Engine עם ההיסטוריה וההודעה הנוכחית
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get("host")}`;
     const aiResponse = await fetch(`${baseUrl}/api/ai/engine`, {
       method: "POST",
@@ -120,7 +120,9 @@ export async function POST(req: Request) {
     });
 
     if (!aiResponse.ok) {
-        throw new Error(`AI Engine failed with status ${aiResponse.status}`);
+        const errorText = await aiResponse.text();
+        console.error("AI Engine Error:", errorText);
+        throw new Error(`AI Engine failed: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
@@ -183,7 +185,7 @@ export async function POST(req: Request) {
     return new NextResponse("SUCCESS", { status: 200 });
 
   } catch (error) {
-    console.error("🔥 Critical Error:", error);
+    console.error("🔥 Global Error:", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }
