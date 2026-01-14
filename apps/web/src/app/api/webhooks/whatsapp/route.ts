@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// פונקציית עזר לשליחה למטא
+// --- פונקציות עזר לשליחה ואינטגרציות ---
+
 async function sendDirectWhatsApp(phoneId: string, token: string, to: string, text: string) {
   return fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
     method: "POST",
@@ -18,7 +19,6 @@ async function sendDirectWhatsApp(phoneId: string, token: string, to: string, te
   });
 }
 
-// פונקציות עזר לגוגל (קלנדר ושיטס)
 async function createGoogleCalendarEvent(accessToken: string, eventData: any) {
   const { date, time, name, service } = eventData;
   const startDateTime = `${date}T${time}:00Z`;
@@ -42,6 +42,8 @@ async function appendGoogleSheetsRow(accessToken: string, sheetData: any) {
   });
 }
 
+// --- הלוגיקה המרכזית (POST) ---
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -62,9 +64,9 @@ export async function POST(req: Request) {
     if (!connection || !connection.bot) return new NextResponse("NO_CONNECTION", { status: 200 });
 
     const userPhone = message.from;
-    const incomingText = message.text?.body;
+    const incomingText = message.text?.body || "";
 
-    // --- חדש: ניהול איש קשר (Contact) - חובה לפי ה-Prisma שלך ---
+    // 2. ניהול איש קשר (Contact) - חובה לפי ה-Schema שלך
     const contact = await prisma.contact.upsert({
       where: {
         botId_phone: {
@@ -72,7 +74,9 @@ export async function POST(req: Request) {
           phone: userPhone,
         },
       },
-      update: {}, // אם קיים, לא נעדכן כלום כרגע
+      update: {
+        name: value?.contacts?.[0]?.profile?.name || "WhatsApp User"
+      },
       create: {
         botId: connection.botId!,
         phone: userPhone,
@@ -80,32 +84,32 @@ export async function POST(req: Request) {
       },
     });
 
-    // 2. שמירת ההודעה הנכנסת - התאמה ל-Enums של ה-Schema (INCOMING, TEXT)
+    // 3. שמירת ההודעה הנכנסת (INCOMING, TEXT)
     await prisma.message.create({
       data: {
         content: incomingText,
         botId: connection.botId!,
-        contactId: contact.id, // שימוש ב-ID של איש הקשר שיצרנו/מצאנו
+        contactId: contact.id,
         direction: "INCOMING",
         type: "TEXT" 
       }
     });
 
-    // 3. שליפת היסטוריית השיחה (לפי ה-contactId)
-    const history = await prisma.message.findMany({
+    // 4. שליפת היסטוריית השיחה (כדי שהבוט יזכור)
+    const pastMessages = await prisma.message.findMany({
       where: { contactId: contact.id },
       orderBy: { createdAt: "asc" },
-      take: 10 // ניקח 10 הודעות כדי שהבוט יהיה ממש חכם
+      take: 8
     });
 
-    // 4. פנייה ל-AI עם ההיסטוריה (תרגום מ-direction ל-role)
+    // 5. פנייה ל-AI Engine
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get("host")}`;
     const aiResponse = await fetch(`${baseUrl}/api/ai/engine`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: incomingText,
-        history: history.map(h => ({ 
+        history: pastMessages.map(h => ({ 
           role: h.direction === "INCOMING" ? "user" : "assistant", 
           content: h.content 
         })),
@@ -115,33 +119,49 @@ export async function POST(req: Request) {
       }),
     });
 
+    if (!aiResponse.ok) {
+        throw new Error(`AI Engine failed with status ${aiResponse.status}`);
+    }
+
     const aiData = await aiResponse.json();
-    let finalReply = aiData.reply;
+    let finalReply = aiData.reply || aiData.message;
 
-    if (!finalReply) return new NextResponse("AI_ERROR", { status: 200 });
+    if (!finalReply) return new NextResponse("AI_NO_REPLY", { status: 200 });
 
-    // 5. בדיקת אינטגרציות וביצוע פקודות (גוגל)
-    const googleInteg = await prisma.integrationConnection.findFirst({
-      where: { 
-        userId: connection.userId, 
-        provider: { in: ["GOOGLE", "GOOGLE_CALENDAR", "GOOGLE_SHEETS"] } 
-      }
+    // 6. בדיקת אינטגרציות גוגל (קלנדר ושיטס)
+    const integrations = await prisma.integrationConnection.findMany({
+      where: { userId: connection.userId }
     });
 
+    const googleInteg = integrations.find(i => 
+      ["GOOGLE", "GOOGLE_CALENDAR", "GOOGLE_SHEETS"].includes(i.provider)
+    );
+
     if (googleInteg?.accessToken) {
+      // ביצוע קלנדר אם יש פקודה
       const calendarMatch = finalReply.match(/\[CREATE_CALENDAR_EVENT: (.*?)\]/);
       if (calendarMatch) {
-        await createGoogleCalendarEvent(googleInteg.accessToken, JSON.parse(calendarMatch[1]));
-        finalReply = finalReply.replace(/\[CREATE_CALENDAR_EVENT:.*?\]/, "").trim();
+        try {
+          await createGoogleCalendarEvent(googleInteg.accessToken, JSON.parse(calendarMatch[1]));
+          finalReply = finalReply.replace(/\[CREATE_CALENDAR_EVENT:.*?\]/, "").trim();
+        } catch (e) {
+          console.error("Calendar Error:", e);
+        }
       }
+
+      // ביצוע שיטס אם יש פקודה
       const sheetsMatch = finalReply.match(/\[CREATE_SHEETS_ROW: (.*?)\]/);
       if (sheetsMatch) {
-        await appendGoogleSheetsRow(googleInteg.accessToken, JSON.parse(sheetsMatch[1]));
-        finalReply = finalReply.replace(/\[CREATE_SHEETS_ROW:.*?\]/, "").trim();
+        try {
+          await appendGoogleSheetsRow(googleInteg.accessToken, JSON.parse(sheetsMatch[1]));
+          finalReply = finalReply.replace(/\[CREATE_SHEETS_ROW:.*?\]/, "").trim();
+        } catch (e) {
+          console.error("Sheets Error:", e);
+        }
       }
     }
 
-    // 6. שמירת תגובת הבוט ב-DB (OUTGOING)
+    // 7. שמירת תגובת הבוט ב-DB (OUTGOING)
     await prisma.message.create({
       data: {
         content: finalReply,
@@ -152,13 +172,18 @@ export async function POST(req: Request) {
       }
     });
 
-    // 7. שליחה למטא
-    await sendDirectWhatsApp(connection.phoneNumberId as string, connection.accessToken as string, userPhone, finalReply);
+    // 8. שליחה למטא וואטסאפ
+    await sendDirectWhatsApp(
+      connection.phoneNumberId as string, 
+      connection.accessToken as string, 
+      userPhone, 
+      finalReply
+    );
 
     return new NextResponse("SUCCESS", { status: 200 });
 
   } catch (error) {
-    console.error("🔥 Error:", error);
+    console.error("🔥 Critical Error:", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }
