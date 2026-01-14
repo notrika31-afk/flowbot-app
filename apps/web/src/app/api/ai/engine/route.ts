@@ -1,4 +1,4 @@
-// force update 9 - Google Sheets + Calendar + Original Logic
+// force update 10 - Diagnostic Edition (Calendar + Sheets + FULL LOGS)
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { generateSystemPrompt } from './prompts'; 
@@ -100,7 +100,7 @@ function detectNextPhase(userMessage: string, aiMessage: string, phase: string) 
 }
 
 /* ============================================================
-    TOOLS DEFINITION (כל הכלים המקוריים + הוספת SHEETS)
+    TOOLS DEFINITION
 ============================================================ */
 const CALENDAR_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -225,6 +225,8 @@ export async function POST(req: Request) {
 
     // --- הלוגיקה המקורית שלך ---
     let { message, history = [], phase = "intro", attachments = [], existingFlow = null, isFreshScan = false } = body;
+    console.log("📨 [AI Engine] New message received:", message);
+
     const knowledgeSummary = buildKnowledgeHint(attachments);
 
     let activeIntegrations: string[] = [];
@@ -233,8 +235,8 @@ export async function POST(req: Request) {
     let siteLink: string | null = null;
     let fullKnowledgeBase = "";
 
-    // שימוש ב-userId מהסשן או מה-body (לוואטסאפ)
     const effectiveUserId = userId || body.userId;
+    console.log("👤 [AI Engine] Effective User ID:", effectiveUserId);
 
     if (effectiveUserId) {
         try {
@@ -250,6 +252,7 @@ export async function POST(req: Request) {
             });
 
             activeIntegrations = connections.map(c => c.provider as string);
+            console.log("🔗 [AI Engine] Active Connections found in DB:", activeIntegrations);
             
             const paybox = connections.find(c => (c.provider as string) === 'PAYBOX');
             if (paybox && paybox.metadata) {
@@ -261,13 +264,19 @@ export async function POST(req: Request) {
                 siteLink = (siteConn.metadata as any).url;
             }
 
-            if (activeIntegrations.includes('GOOGLE_CALENDAR')) tools.push(...CALENDAR_TOOLS);
-            if (activeIntegrations.includes('GOOGLE_SHEETS')) tools.push(SHEETS_TOOL);
+            if (activeIntegrations.includes('GOOGLE_CALENDAR')) {
+                tools.push(...CALENDAR_TOOLS);
+                console.log("📅 [AI Engine] Calendar tools added to AI.");
+            }
+            if (activeIntegrations.includes('GOOGLE_SHEETS')) {
+                tools.push(SHEETS_TOOL);
+                console.log("📊 [AI Engine] Sheets tool added to AI.");
+            }
             if (activeIntegrations.includes('MAKE')) tools.push(AUTOMATION_TOOL);
             if (activeIntegrations.includes('STRIPE') || activeIntegrations.includes('PAYPAL')) tools.push(PAYMENT_TOOL);
 
         } catch (dbError) {
-            console.error("Error fetching integrations:", dbError);
+            console.error("❌ [AI Engine] DB Error fetching integrations:", dbError);
         }
     }
 
@@ -287,7 +296,6 @@ export async function POST(req: Request) {
 
     const messagesForAi: any[] = [{ role: "system", content: systemPrompt + currentTimeMsg }];
     
-    // 🛠️ התיקון הקטן והיחיד: נרמול היסטוריה כדי למנוע את ה-400 Error
     history.forEach((msg: any) => {
       const role = (msg.role === "bot" || msg.role === "assistant") ? "assistant" : "user";
       const text = msg.text || msg.content || "";
@@ -296,7 +304,6 @@ export async function POST(req: Request) {
       }
     });
 
-    // וידוא שלא נשלחות הודעות ריקות או כפולות של User
     if (message) {
         if (messagesForAi.length > 0 && messagesForAi[messagesForAi.length - 1].role === "user") {
             messagesForAi[messagesForAi.length - 1].content += `\n${message}`;
@@ -304,6 +311,8 @@ export async function POST(req: Request) {
             messagesForAi.push({ role: "user", content: [{ type: "text", text: message }] });
         }
     }
+
+    console.log("🤖 [AI Engine] Sending to AI with", tools.length, "available tools.");
 
     let response = await openai.chat.completions.create({
       model: "gemini-2.0-flash-exp",
@@ -315,23 +324,36 @@ export async function POST(req: Request) {
     });
 
     let aiMessage = response.choices[0]?.message;
+    console.log("💎 [AI Engine] Raw AI Response Object:", JSON.stringify(aiMessage, null, 2));
+
     let replyText = aiMessage?.content || "";
 
     if (aiMessage?.tool_calls && aiMessage.tool_calls.length > 0) {
+      console.log("🛠️ [AI Engine] AI decided to use tools. Count:", aiMessage.tool_calls.length);
       messagesForAi.push(aiMessage);
+      
       for (const toolCall of aiMessage.tool_calls) {
         const fnName = (toolCall as any).function.name;
         const args = JSON.parse((toolCall as any).function.arguments);
         let toolResult = "";
 
+        console.log(`🚀 [AI Engine] Executing tool: ${fnName}`, args);
+
         try {
           if (fnName === "calendar_check_availability" && effectiveUserId) {
             const slots = await googleCalendarService.listBusySlots(effectiveUserId, args.start_date, args.end_date);
             toolResult = JSON.stringify({ status: "success", busy_slots: slots });
+            console.log("✅ [AI Engine] Calendar check success.");
           } 
           else if (fnName === "calendar_create_event" && effectiveUserId) {
-            const event = await googleCalendarService.createEvent(effectiveUserId, { summary: args.summary, startTime: args.start_time, endTime: args.endTime || args.end_time, attendeeEmail: args.email });
+            const event = await googleCalendarService.createEvent(effectiveUserId, { 
+                summary: args.summary, 
+                startTime: args.start_time, 
+                endTime: args.endTime || args.end_time || args.start_time, 
+                attendeeEmail: args.email 
+            });
             toolResult = JSON.stringify({ status: "success", event_link: event.link });
+            console.log("✅ [AI Engine] Calendar event created:", event.link);
           }
           else if (fnName === "append_sheets_row" && effectiveUserId) {
              const conn = await prisma.integrationConnection.findUnique({ 
@@ -348,8 +370,9 @@ export async function POST(req: Request) {
                  });
                  if (!res.ok) throw new Error("Sheets API Error");
                  toolResult = JSON.stringify({ status: "success" });
+                 console.log("✅ [AI Engine] Sheets row added.");
              } else {
-                 toolResult = JSON.stringify({ status: "error", message: "Missing Sheets token" });
+                 throw new Error("Missing Sheets token");
              }
           }
           else if (fnName === "trigger_automation" && effectiveUserId) {
@@ -361,7 +384,10 @@ export async function POST(req: Request) {
           else if (fnName === "generate_payment_link") {
               toolResult = JSON.stringify({ status: "success", payment_link: "https://stripe.com/mock" });
           }
-        } catch (err: any) { toolResult = JSON.stringify({ status: "error", message: err.message }); }
+        } catch (err: any) { 
+            console.error(`❌ [AI Engine] Error in tool ${fnName}:`, err.message);
+            toolResult = JSON.stringify({ status: "error", message: err.message }); 
+        }
 
         messagesForAi.push({ role: "tool", tool_call_id: toolCall.id, content: toolResult });
       }
@@ -388,7 +414,7 @@ export async function POST(req: Request) {
     });
 
   } catch (error) {
-    console.error("AI Engine Error:", error);
+    console.error("❌ [AI Engine] Global Error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });
   }
 }
