@@ -64,25 +64,41 @@ export async function POST(req: Request) {
     const userPhone = message.from;
     const incomingText = message.text?.body;
 
-    // 2. שמירת ההודעה הנכנסת - שימוש ב-type במקום role לפי ה-Schema שלך
+    // --- חדש: ניהול איש קשר (Contact) - חובה לפי ה-Prisma שלך ---
+    const contact = await prisma.contact.upsert({
+      where: {
+        botId_phone: {
+          botId: connection.botId!,
+          phone: userPhone,
+        },
+      },
+      update: {}, // אם קיים, לא נעדכן כלום כרגע
+      create: {
+        botId: connection.botId!,
+        phone: userPhone,
+        name: value?.contacts?.[0]?.profile?.name || "WhatsApp User",
+      },
+    });
+
+    // 2. שמירת ההודעה הנכנסת - התאמה ל-Enums של ה-Schema (INCOMING, TEXT)
     await prisma.message.create({
       data: {
         content: incomingText,
-        conversationId: userPhone,
-        botId: connection.botId,
-        direction: "INBOUND",
+        botId: connection.botId!,
+        contactId: contact.id, // שימוש ב-ID של איש הקשר שיצרנו/מצאנו
+        direction: "INCOMING",
         type: "TEXT" 
       }
     });
 
-    // 3. שליפת היסטוריית השיחה
+    // 3. שליפת היסטוריית השיחה (לפי ה-contactId)
     const history = await prisma.message.findMany({
-      where: { conversationId: userPhone },
+      where: { contactId: contact.id },
       orderBy: { createdAt: "asc" },
-      take: 6
+      take: 10 // ניקח 10 הודעות כדי שהבוט יהיה ממש חכם
     });
 
-    // 4. פנייה ל-AI עם ההיסטוריה (כאן אנחנו מתרגמים ל-role עבור מנוע ה-AI)
+    // 4. פנייה ל-AI עם ההיסטוריה (תרגום מ-direction ל-role)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get("host")}`;
     const aiResponse = await fetch(`${baseUrl}/api/ai/engine`, {
       method: "POST",
@@ -90,7 +106,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         message: incomingText,
         history: history.map(h => ({ 
-          role: h.direction === "INBOUND" ? "user" : "assistant", 
+          role: h.direction === "INCOMING" ? "user" : "assistant", 
           content: h.content 
         })),
         phase: "simulate",
@@ -106,7 +122,10 @@ export async function POST(req: Request) {
 
     // 5. בדיקת אינטגרציות וביצוע פקודות (גוגל)
     const googleInteg = await prisma.integrationConnection.findFirst({
-      where: { userId: connection.userId, provider: "google" }
+      where: { 
+        userId: connection.userId, 
+        provider: { in: ["GOOGLE", "GOOGLE_CALENDAR", "GOOGLE_SHEETS"] } 
+      }
     });
 
     if (googleInteg?.accessToken) {
@@ -122,13 +141,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // 6. שמירת תגובת הבוט ב-DB
+    // 6. שמירת תגובת הבוט ב-DB (OUTGOING)
     await prisma.message.create({
       data: {
         content: finalReply,
-        conversationId: userPhone,
-        botId: connection.botId,
-        direction: "OUTBOUND",
+        botId: connection.botId!,
+        contactId: contact.id,
+        direction: "OUTGOING",
         type: "TEXT"
       }
     });
