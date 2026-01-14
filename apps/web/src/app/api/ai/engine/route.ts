@@ -1,4 +1,4 @@
-// force update 8 - 100% Original Logic Restored + 400 Error Safety Patch
+// force update 9 - Google Sheets + Calendar + Original Logic
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { generateSystemPrompt } from './prompts'; 
@@ -100,7 +100,7 @@ function detectNextPhase(userMessage: string, aiMessage: string, phase: string) 
 }
 
 /* ============================================================
-    TOOLS DEFINITION (כל הכלים המקוריים ללא שינוי)
+    TOOLS DEFINITION (כל הכלים המקוריים + הוספת SHEETS)
 ============================================================ */
 const CALENDAR_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -136,6 +136,22 @@ const CALENDAR_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     }
   }
 ];
+
+const SHEETS_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "append_sheets_row",
+    description: "Append a new row of data to a Google Sheet.",
+    parameters: {
+      type: "object",
+      properties: {
+        spreadsheet_id: { type: "string", description: "The ID of the Google Sheet" },
+        values: { type: "array", items: { type: "string" }, description: "Array of values to add as a row" }
+      },
+      required: ["spreadsheet_id", "values"]
+    }
+  }
+};
 
 const AUTOMATION_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: "function",
@@ -246,6 +262,7 @@ export async function POST(req: Request) {
             }
 
             if (activeIntegrations.includes('GOOGLE_CALENDAR')) tools.push(...CALENDAR_TOOLS);
+            if (activeIntegrations.includes('GOOGLE_SHEETS')) tools.push(SHEETS_TOOL);
             if (activeIntegrations.includes('MAKE')) tools.push(AUTOMATION_TOOL);
             if (activeIntegrations.includes('STRIPE') || activeIntegrations.includes('PAYPAL')) tools.push(PAYMENT_TOOL);
 
@@ -315,6 +332,25 @@ export async function POST(req: Request) {
           else if (fnName === "calendar_create_event" && effectiveUserId) {
             const event = await googleCalendarService.createEvent(effectiveUserId, { summary: args.summary, startTime: args.start_time, endTime: args.endTime || args.end_time, attendeeEmail: args.email });
             toolResult = JSON.stringify({ status: "success", event_link: event.link });
+          }
+          else if (fnName === "append_sheets_row" && effectiveUserId) {
+             const conn = await prisma.integrationConnection.findUnique({ 
+                 where: { userId_provider: { userId: effectiveUserId, provider: 'GOOGLE_SHEETS' } } 
+             });
+             if (conn?.accessToken) {
+                 const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${args.spreadsheet_id}/values/A1:append?valueInputOption=USER_ENTERED`, {
+                     method: 'POST',
+                     headers: { 
+                         'Authorization': `Bearer ${conn.accessToken}`,
+                         'Content-Type': 'application/json'
+                     },
+                     body: JSON.stringify({ values: [args.values] })
+                 });
+                 if (!res.ok) throw new Error("Sheets API Error");
+                 toolResult = JSON.stringify({ status: "success" });
+             } else {
+                 toolResult = JSON.stringify({ status: "error", message: "Missing Sheets token" });
+             }
           }
           else if (fnName === "trigger_automation" && effectiveUserId) {
              const conn = await prisma.integrationConnection.findUnique({ where: { userId_provider: { userId: effectiveUserId, provider: 'MAKE' } }, select: { metadata: true } });

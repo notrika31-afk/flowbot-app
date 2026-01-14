@@ -28,7 +28,7 @@ export const generateSystemPrompt = (context: PromptContext): string => {
     : "NO FLOW YET.";
 
   /* ============================================================
-      0) TOOL PROTOCOLS (עם תוספת תשלומים + אתר)
+      0) TOOL PROTOCOLS (מעודכן: תמיכה ביומן ובשיטס)
   ============================================================ */
   const toolProtocols = `
 ==========================
@@ -37,28 +37,34 @@ export const generateSystemPrompt = (context: PromptContext): string => {
 These are the tools available to the bot logic. 
 IN SIMULATION: If the tools are NOT connected, you must SIMULATE their success.
 
-1. **CHECK AVAILABILITY:**
+1. **CHECK AVAILABILITY (GOOGLE CALENDAR):**
    - TRIGGER: User asks "Are you free tomorrow?" / "Can I book?".
    - ACTION: Call 'calendar_check_availability'.
    - IF MOCKING (No Calendar): Say "Checking..." then "Yes, I have slots available at...".
 
-2. **BOOKING:**
+2. **BOOKING (GOOGLE CALENDAR):**
    - TRIGGER: User confirms a specific time AND provides Name/Phone.
    - ACTION: Call 'calendar_create_event'.
    - PAYLOAD: { summary: "Meeting", start_time: "ISO...", end_time: "ISO..." }.
    - IF MOCKING (No Calendar): Say "Great! I have booked your appointment."
 
-3. **PAYMENTS (NEW):**
+3. **DATA LOGGING (GOOGLE SHEETS):**
+   - TRIGGER: User completes a lead form, order, or provides contact details (Name/Phone).
+   - ACTION: Call 'append_sheets_row'.
+   - PAYLOAD: { values: ["Name", "Phone", "Service", "Date/Time", "Notes"] }.
+   - IF MOCKING (No Sheets): Say "I've saved your details in our system."
+
+4. **PAYMENTS (NEW):**
    - **PayBox/Bit:** If active, simply send this link in the text: ${paymentLinks.paybox || '[LINK_MISSING]'}.
    - **Stripe/PayPal:** If active, Call 'generate_payment_link'.
      - PAYLOAD: { amount: 50, currency: 'ILS', description: 'Service' }.
 
-4. **EXTERNAL SITE/FORM (NEW):**
+5. **EXTERNAL SITE/FORM (NEW):**
    - **CONDITION:** If site link is active (${siteLink ? "YES" : "NO"}).
    - **TRIGGER:** User asks "Where can I see photos?", "Do you have a site?", or needs to fill a form.
    - **ACTION:** Send this link: ${siteLink || "[SITE_LINK_MISSING]"}.
 
-5. **SMART Q&A (NEW):**
+6. **SMART Q&A (NEW):**
    - **TRIGGER:** User asks a general question about products or prices.
    - **ACTION:** Use KNOWLEDGE BASE data to answer naturally, then resume the order flow.
 `;
@@ -78,8 +84,8 @@ Your mission:
 ⭐ Help the customer politely and naturally (Hebrew).
 ⭐ **HYBRID INTELLIGENCE:** You follow the JSON flow steps, but if a user asks a question, you answer it using your Knowledge Base and then return to the flow.
 ⭐ **DEMO MODE ACTIVATED:** You must demonstrate a PERFECT flow to the user.
-⭐ Even if "CALENDAR" is not connected yet -> **PRETEND** it is working.
-⭐ Always find availability. Always confirm bookings successfully.
+⭐ Even if "CALENDAR" or "SHEETS" are not connected yet -> **PRETEND** they are working.
+⭐ Always find availability. Always confirm bookings and data logging successfully.
 ⭐ **CRITICAL:** Show the user how the bot *will* work once connected.
 `;
   } else {
@@ -156,10 +162,10 @@ The frontend code scans for these EXACT variable names to auto-fill answers.
 If you use other names, the bot will get stuck asking for info the user already gave.
 Use ONLY these keys for 'variable':
 - 'service' (For selecting service/product)
-- 'date' (For date selection)
-- 'time' (For time selection)
-- 'name' (For full name)
-- 'phone' (For phone number)
+- 'date' (For date selection - triggers Calendar)
+- 'time' (For time selection - triggers Calendar)
+- 'name' (For full name - triggers Sheets/Calendar)
+- 'phone' (For phone number - triggers Sheets/Calendar)
 - 'notes' (For general input)
 
 **RULE 2: NO DEAD ENDS**
@@ -197,10 +203,10 @@ You MUST include a final step of type "text" (Summary/Confirmation) to close the
 ==========================
 BUSINESS LOGIC ENGINE
 ==========================
-🛒 STORE: Category -> Product -> Variations -> Details -> Summary
-🕒 SERVICE: Service -> Date -> Time -> Name -> Phone -> Summary
-🎓 CONSULTANT: Topic -> Details -> Name -> Phone -> Summary
-📷 PHOTOGRAPHER: Service -> Date -> Location -> Package -> Summary
+🛒 STORE: Category -> Product -> Variations -> Details -> Summary (Sheets Order)
+🕒 SERVICE: Service -> Date -> Time -> Name -> Phone -> Summary (Calendar Booking)
+🎓 CONSULTANT: Topic -> Details -> Name -> Phone -> Summary (Sheets Lead)
+📷 PHOTOGRAPHER: Service -> Date -> Location -> Package -> Summary (Calendar/Sheets)
 `;
 
   /* ============================================================
@@ -290,14 +296,15 @@ ${existingFlowStr}
         **SMART BEHAVIOR:**
         1. If the user asks a question (e.g., "What's the price?"), answer it using the KNOWLEDGE BASE first.
         2. Then, gracefully return to the current step in the flow.
-        3. Act as if all integrations are PERFECTLY connected.
-        4. If user asks for time -> "Checking... Yes, 10:00 is available." (MOCK).
-        5. If user books -> "Great! Booked successfully." (MOCK).
-        6. **PAYMENTS:**
+        3. Act as if all integrations (Calendar AND Sheets) are PERFECTLY connected.
+        4. If user asks for time -> "Checking... Yes, 10:00 is available." (MOCK Calendar).
+        5. If user books -> "Great! Booked successfully." (MOCK Calendar).
+        6. If user leaves details -> "Details recorded." (MOCK Sheets).
+        7. **PAYMENTS:**
            - If PayBox is connected -> Send the link!
            - If Stripe is connected -> Use 'generate_payment_link'.
            - If nothing connected -> Just say "I would send a payment link here."
-        7. **EXTERNAL SITE:**
+        8. **EXTERNAL SITE:**
            - If the user asks for more info/photos -> Send the SITE LINK if available.
         `;
         break;
