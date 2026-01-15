@@ -15,6 +15,9 @@ export async function POST(req: Request) {
     const TOKEN = body?.accessToken || process.env.WHATSAPP_TOKEN;
     const PHONE_ID = body?.phoneId || process.env.WHATSAPP_PHONE_ID;
 
+    // לוג לבדיקה - עוזר לראות מה מגיע מה-Frontend
+    console.log("Attempting to send WA message to:", to);
+
     if (!to || !text) {
       return NextResponse.json({ error: "חסר to/text" }, { status: 400 });
     }
@@ -35,15 +38,21 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         messaging_product: "whatsapp",
-        to,
+        to: to,
+        type: "text", // <--- השדה שהיה חסר וגרם ל-Missing Fields
         text: { body: text },
       }),
     });
 
     const data = await res.json();
+    
     if (!res.ok) {
-      console.error("WA SEND ERROR:", data);
-      return NextResponse.json({ error: "WA error", details: data }, { status: 500 });
+      console.error("WA SEND ERROR FROM META:", data);
+      // מחזירים את השגיאה המקורית ממטא כדי שנדע בדיוק מה הבעיה
+      return NextResponse.json({ 
+        error: "WA error", 
+        details: data.error?.message || data 
+      }, { status: res.status });
     }
 
     return NextResponse.json({ ok: true, data }, { status: 200 });
