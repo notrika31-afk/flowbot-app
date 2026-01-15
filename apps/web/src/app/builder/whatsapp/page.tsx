@@ -134,7 +134,7 @@ export default function WhatsappConnectionPage() {
         setTestSent(true);
       } else {
         console.error("API error:", data);
-        setErrorMessage(data.error?.message || data.message || "Send failed. Check Token permissions.");
+        setErrorMessage(data.error?.message || data.details || data.message || "Send failed. Check Token permissions.");
       }
     } catch (error) {
       console.error("Test send failed", error);
