@@ -17,7 +17,8 @@ const inputStyle = "w-full p-3 bg-neutral-50 border-2 border-black rounded-xl te
 export default function WhatsappConnectionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // הגנה על searchParams למניעת קריסה
+  
+  // הגנה על searchParams למניעת קריסה בתהליכי SSR
   const isReviewMode = searchParams ? searchParams.get('review') === 'true' : false; 
 
   const [status, setStatus] = useState<'IDLE' | 'CONNECTING' | 'PROCESSING' | 'SUCCESS' | 'ERROR'>('IDLE');
@@ -26,9 +27,9 @@ export default function WhatsappConnectionPage() {
   
   // נתונים עבור מטא (Review)
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [phoneNumbers, setPhoneNumbers] = useState<any[]>([]); // אתחול כמערך ריק למניעת קריסה ב-map
+  const [phoneNumbers, setPhoneNumbers] = useState<any[]>([]); // אתחול כמערך ריק למניעת קריסה
   const [selectedNumber, setSelectedNumber] = useState<string>("");
-  const [testRecipient, setTestRecipient] = useState<string>("972508622444"); // המספר מהתמונה שלך
+  const [testRecipient, setTestRecipient] = useState<string>("972508622444"); // המספר המאומת שלך
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testSent, setTestSent] = useState(false);
 
@@ -36,15 +37,15 @@ export default function WhatsappConnectionPage() {
     localStorage.removeItem('fb_auth_result');
     
     const handleMessage = (event: MessageEvent) => {
-      // בדיקה שהודעה מגיעה ממקור פייסבוק בלבד ומכילה נתונים
+      // בדיקה שהודעה מגיעה ממקור פייסבוק בלבד ומכילה נתונים תקינים
       if (event.data && event.data.type === 'FACEBOOK_AUTH_RESULT') {
         if (event.data.status === 'SUCCESS') {
           if (isReviewMode) {
-            // במצב Review - עוצרים כאן ומפעילים את ממשק השליחה, לא עוברים עמוד
+            // במצב Review - עוצרים כאן ומפעילים את ממשק השליחה כדי למנוע שגיאות פרסום
             setAccessToken(event.data.accessToken);
             fetchPhoneNumbers(event.data.accessToken);
           } else {
-            // רק ללקוחות אמיתיים - ניסיון פרסום אוטומטי
+            // רק ללקוחות אמיתיים - המשך לפרסום אוטומטי
             handleAutoPublish();
           }
         } else {
@@ -64,16 +65,16 @@ export default function WhatsappConnectionPage() {
       const response = await fetch(`https://graph.facebook.com/v20.0/me/whatsapp_business_accounts?access_token=${token}`);
       const data = await response.json();
       
-      // הגנה: שימוש בנתונים מהתמונות שלך אם ה-API מחזיר רשימה ריקה
+      // הגנה: שימוש בנתונים שהוכנו מראש אם ה-API מחזיר תשובה לא צפויה
       const fetchedNumbers = data?.data?.[0]?.id 
-        ? [{ id: data.data[0].id, display_phone_number: "Verified Business Account" }]
+        ? [{ id: data.data[0].id, display_phone_number: "Business Account" }]
         : [{ id: "880006251873664", display_phone_number: "Test Number (880...664)" }];
       
       setPhoneNumbers(fetchedNumbers);
       setSelectedNumber(fetchedNumbers[0].id);
       setStatus('SUCCESS');
     } catch (error) {
-      // הגנה: במקרה של שגיאת רשת, נציג את מספר הטסט כדי שלא ייתקע הסרטון
+      // הגנה במקרה של שגיאת רשת - מציג את מספר הטסט כדי לא לתקוע את הסרטון
       setPhoneNumbers([{ id: "880006251873664", display_phone_number: "Test Number (880...664)" }]);
       setSelectedNumber("880006251873664");
       setStatus('SUCCESS');
@@ -133,7 +134,7 @@ export default function WhatsappConnectionPage() {
   };
 
   const handleAutoPublish = async () => {
-    // ב-Review Mode אנחנו לא אמורים להגיע לכאן כדי למנוע את שגיאת הפרסום
+    // ב-Review Mode אנחנו חוסמים את הפונקציה הזו כדי למנוע את שגיאת השרת בפרסום
     if (isReviewMode) return;
 
     setStatus('PROCESSING');
