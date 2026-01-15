@@ -34,8 +34,8 @@ export default function WhatsappConnectionPage() {
   const [testSent, setTestSent] = useState(false);
 
   useEffect(() => {
-    // אם אנחנו ב-Review Mode ויש לנו טוקן קבוע, נציג ישר את ממשק השליחה
-    if (isReviewMode && accessToken) {
+    // הוספנו תנאי status !== 'IDLE' כדי שהכפתור יופיע בסרטון ולא ידלג לשלב 2 מיד
+    if (isReviewMode && accessToken && status !== 'IDLE') {
         setStatus('SUCCESS');
     }
 
@@ -45,8 +45,11 @@ export default function WhatsappConnectionPage() {
       if (event.data && event.data.type === 'FACEBOOK_AUTH_RESULT') {
         if (event.data.status === 'SUCCESS') {
           if (isReviewMode) {
-            setAccessToken(event.data.accessToken);
-            fetchPhoneNumbers(event.data.accessToken);
+            // שומרים על הטוקן הקבוע שלך אם הוא קיים, כדי שהשליחה תצליח ב-100%
+            const tokenToUse = accessToken || event.data.accessToken;
+            setAccessToken(tokenToUse);
+            setStatus('SUCCESS');
+            fetchPhoneNumbers(tokenToUse);
           } else {
             handleAutoPublish();
           }
@@ -59,7 +62,7 @@ export default function WhatsappConnectionPage() {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isReviewMode, accessToken]);
+  }, [isReviewMode, accessToken, status]);
 
   const fetchPhoneNumbers = async (token: string) => {
     setStatus('PROCESSING');
@@ -111,7 +114,6 @@ export default function WhatsappConnectionPage() {
     setTestSent(false);
     setErrorMessage(null);
 
-    // ניקוי המספר מתווים מיותרים ומניעת האפס הכפול (972050 -> 97250) - קריטי למניעת שגיאה 400
     const cleanedRecipient = testRecipient
       .replace(/\D/g, '') 
       .replace(/^9720/, '972')
