@@ -67,8 +67,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "אין חיבור וואטסאפ פעיל" }, { status: 400 });
     }
 
-    // בניית הקריאה ל-Meta
-    const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
+    // בניית הקריאה ל-Meta - עודכן ל-v22.0 לפי ה-Dashboard שלך
+    const url = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
 
     const metaPayload = {
       messaging_product: "whatsapp",
@@ -107,7 +107,8 @@ export async function POST(req: Request) {
         });
     }
 
-    return NextResponse.json({ status: "sent", meta: result });
+    // הוספת ok: true כדי לסנכרן עם ה-Frontend
+    return NextResponse.json({ ok: true, status: "sent", meta: result });
   } catch (err) {
     console.error("SEND ERROR:", err);
     return NextResponse.json({ error: "server_error" }, { status: 500 });

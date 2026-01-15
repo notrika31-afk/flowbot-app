@@ -65,7 +65,8 @@ export default function WhatsappConnectionPage() {
   const fetchPhoneNumbers = async (token: string) => {
     setStatus('PROCESSING');
     try {
-      const response = await fetch(`https://graph.facebook.com/v20.0/me/whatsapp_business_accounts?access_token=${token}`);
+      // עדכון לגרסה v22.0 לסנכרון מלא עם ה-Dashboard
+      const response = await fetch(`https://graph.facebook.com/v22.0/me/whatsapp_business_accounts?access_token=${token}`);
       const data = await response.json();
       
       const fetchedNumbers = data?.data?.[0]?.id 
@@ -130,7 +131,8 @@ export default function WhatsappConnectionPage() {
       });
 
       const data = await res.json();
-      if (data.ok || data.success) {
+      // בדיקה מול ok: true החדש שחזר מה-Backend
+      if (data.ok || data.status === "sent") {
         setTestSent(true);
       } else {
         console.error("API error:", data);
