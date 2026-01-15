@@ -6,28 +6,27 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const to = body?.to;
+    
+    // שליפת הנתונים וביצוע המרה למחרוזת וניקוי רווחים למניעת "Missing fields"
+    const to = body?.to?.toString().replace('+', '').trim();
     const text = body?.text;
 
-    // --- שינוי קטן לטובת הדינמיות ---
-    // אם שלחנו טוקן ו-ID בגוף הבקשה (מה-DB), נשתמש בהם. 
-    // אם לא, נשתמש ב-env כברירת מחדל (מה שיש לך היום).
-    const TOKEN = body?.accessToken || process.env.WHATSAPP_TOKEN;
-    const PHONE_ID = body?.phoneId || process.env.WHATSAPP_PHONE_ID;
+    // הגדרת הטוקן וה-ID עם ניקוי רווחים מיותרים
+    const TOKEN = (body?.accessToken || process.env.WHATSAPP_TOKEN)?.toString().trim();
+    const PHONE_ID = (body?.phoneId || process.env.WHATSAPP_PHONE_ID)?.toString().trim();
 
-    // לוג לבדיקה - עוזר לראות מה מגיע מה-Frontend
+    // לוג לבדיקה בשרת - עוזר לראות מה נשלח בפועל
     console.log("Attempting to send WA message to:", to);
 
-    if (!to || !text) {
-      return NextResponse.json({ error: "חסר to/text" }, { status: 400 });
+    // בדיקה מחמירה שכל ארבעת הפרמטרים קיימים לפני הפנייה למטא
+    if (!to || !text || !TOKEN || !PHONE_ID) {
+      return NextResponse.json({ 
+        error: "Missing mandatory fields", 
+        check: { to: !!to, text: !!text, token: !!TOKEN, phoneId: !!PHONE_ID } 
+      }, { status: 400 });
     }
 
-    if (!TOKEN || !PHONE_ID) {
-      console.log("MOCK SEND (Missing Credentials):", { to, text });
-      return NextResponse.json({ ok: true, mock: true }, { status: 200 });
-    }
-
-    // עדכון לגרסה v22.0 כפי שמופיע בלוח הבקרה שלך בתמונה 7
+    // שימוש בגרסה v22.0 כפי שמופיע בלוח הבקרה שלך
     const url = `https://graph.facebook.com/v22.0/${PHONE_ID}/messages`;
     
     const res = await fetch(url, {
@@ -38,7 +37,7 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         messaging_product: "whatsapp",
-        recipient_type: "individual", // הגדרה מפורשת למניעת שגיאת שדות חסרים
+        recipient_type: "individual", // שדה מומלץ למניעת שגיאות פענוח
         to: to,
         type: "text", 
         text: { body: text },
@@ -49,7 +48,7 @@ export async function POST(req: Request) {
     
     if (!res.ok) {
       console.error("WA SEND ERROR FROM META:", data);
-      // מחזירים את השגיאה המקורית ממטא כדי שנדע בדיוק מה הבעיה
+      // החזרת פירוט השגיאה המלא ממטא ל-Frontend
       return NextResponse.json({ 
         error: "WA error", 
         details: data.error?.message || data 
