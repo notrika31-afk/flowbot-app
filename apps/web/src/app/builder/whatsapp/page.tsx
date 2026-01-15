@@ -34,21 +34,19 @@ export default function WhatsappConnectionPage() {
   const [testSent, setTestSent] = useState(false);
 
   useEffect(() => {
-    // הוספנו תנאי status !== 'IDLE' כדי שהכפתור יופיע בסרטון ולא ידלג לשלב 2 מיד
-    if (isReviewMode && accessToken && status !== 'IDLE') {
-        setStatus('SUCCESS');
-    }
-
     localStorage.removeItem('fb_auth_result');
     
     const handleMessage = (event: MessageEvent) => {
+      // ברגע שמגיעה הודעה שההתחברות הצליחה - זה המנוע שיעביר אותך לשלב 2
       if (event.data && event.data.type === 'FACEBOOK_AUTH_RESULT') {
         if (event.data.status === 'SUCCESS') {
+          // מעבר מיידי למסך השליחה
+          setStatus('SUCCESS'); 
+
           if (isReviewMode) {
             // שומרים על הטוקן הקבוע שלך אם הוא קיים, כדי שהשליחה תצליח ב-100%
             const tokenToUse = accessToken || event.data.accessToken;
             setAccessToken(tokenToUse);
-            setStatus('SUCCESS');
             fetchPhoneNumbers(tokenToUse);
           } else {
             handleAutoPublish();
@@ -62,7 +60,7 @@ export default function WhatsappConnectionPage() {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isReviewMode, accessToken, status]);
+  }, [isReviewMode, accessToken]); // הסרנו את status מה-dependencies כדי למנוע נעילה
 
   const fetchPhoneNumbers = async (token: string) => {
     setStatus('PROCESSING');
