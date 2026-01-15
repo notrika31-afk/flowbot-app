@@ -1,4 +1,3 @@
-// apps/web/src/app/api/whatsapp/send/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUserFromToken } from "@/lib/auth";
@@ -12,68 +11,71 @@ type SendBody = {
   botId: string;
   to: string;
   message: string;
+  text?: string;        // הוספת תמיכה בשדה מה-Frontend
+  accessToken?: string; // הוספת תמיכה בשדה מה-Frontend
+  phoneId?: string;     // הוספת תמיכה בשדה מה-Frontend
 };
 
 export async function POST(req: Request) {
   try {
-    // התיקון: הוספת await
     const user = await getAuthUserFromToken();
     
     if (!user) {
       return NextResponse.json({ error: "לא מחובר" }, { status: 401 });
     }
 
-    const { botId, to, message } = (await req.json()) as SendBody;
+    const body = (await req.json()) as SendBody;
+    const { botId, to } = body;
+    
+    // סנכרון שמות: משתמשים ב-message או ב-text (מה שקיים)
+    const finalMessage = body.message || body.text;
 
-    if (!botId || !to || !message) {
+    // בדיקה גמישה: מאפשרים שליחה אם יש botId או אם יש נתוני חיבור ישירים (Review Mode)
+    if (!to || !finalMessage || (!botId && (!body.accessToken || !body.phoneId))) {
       return NextResponse.json(
-        { error: "Missing fields" },
+        { error: "Missing fields", details: { to: !!to, msg: !!finalMessage, bot: !!botId } },
         { status: 400 }
       );
     }
 
-    // בדיקה שהבוט שייך למשתמש (עכשיו user.id יעבוד תקין)
-    const bot = await prisma.bot.findFirst({
-      where: { id: botId, ownerId: user.id },
-      select: { id: true },
-    });
+    let phoneNumberId = body.phoneId;
+    let accessToken = body.accessToken;
 
-    if (!bot) {
-      return NextResponse.json(
-        { error: "אין גישה לבוט הזה" },
-        { status: 403 }
-      );
+    // אם קיבלנו botId, נשלוף מהמסד כרגיל
+    if (botId) {
+        const bot = await prisma.bot.findFirst({
+          where: { id: botId, ownerId: user.id },
+          select: { id: true },
+        });
+
+        if (!bot) {
+          return NextResponse.json({ error: "אין גישה לבוט הזה" }, { status: 403 });
+        }
+
+        const connection = await prisma.whatsAppConnection.findFirst({
+          where: { botId: botId, isActive: true },
+          select: { phoneNumberId: true, accessToken: true },
+        });
+
+        if (connection) {
+            phoneNumberId = connection.phoneNumberId;
+            accessToken = connection.accessToken;
+        }
     }
 
-    // שליפת חיבור הוואטסאפ של הבוט
-    const connection = await prisma.whatsAppConnection.findFirst({
-      where: {
-        botId: botId,
-        isActive: true,
-      },
-      select: {
-        phoneNumberId: true,
-        accessToken: true,
-      },
-    });
-
-    if (!connection) {
-      return NextResponse.json(
-        { error: "אין חיבור וואטסאפ פעיל לבוט הזה" },
-        { status: 400 }
-      );
+    if (!phoneNumberId || !accessToken) {
+      return NextResponse.json({ error: "אין חיבור וואטסאפ פעיל" }, { status: 400 });
     }
 
-    const { phoneNumberId, accessToken } = connection;
-
-    // בניית הקריאה ל-Meta (או ספק תואם)
+    // בניית הקריאה ל-Meta
     const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
 
     const metaPayload = {
       messaging_product: "whatsapp",
-      to,
+      recipient_type: "individual",
+      to: to.toString().replace(/\D/g, ''), // ניקוי מספר
       type: "text",
-      text: { body: message },
+      text: { body: finalMessage },
     };
 
     const resp = await fetch(url, {
@@ -88,23 +90,22 @@ export async function POST(req: Request) {
     const result = await resp.json();
     if (!resp.ok) {
       console.error("WHATSAPP SEND ERROR:", result);
-      return NextResponse.json(
-        { error: "WhatsApp send failed", details: result },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "WhatsApp send failed", details: result }, { status: 500 });
     }
 
-    // שומרים גם במסד
-    await prisma.message.create({
-      data: {
-        botId,
-        userId: user.id,
-        fromPhone: null, // outgoing
-        toPhone: to,
-        direction: "outbound",
-        content: message,
-      },
-    });
+    // שמירה במסד רק אם יש botId תקין
+    if (botId) {
+        await prisma.message.create({
+          data: {
+            botId,
+            userId: user.id,
+            fromPhone: null,
+            toPhone: to,
+            direction: "outbound",
+            content: finalMessage,
+          },
+        });
+    }
 
     return NextResponse.json({ status: "sent", meta: result });
   } catch (err) {
