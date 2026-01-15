@@ -110,12 +110,17 @@ export default function WhatsappConnectionPage() {
     setIsSendingTest(true);
     setTestSent(false);
 
+    // ניקוי המספר מתווים מיותרים ומניעת האפס הכפול (972050 -> 97250)
+    const cleanedRecipient = testRecipient
+      .replace(/\D/g, '') // השארת מספרים בלבד
+      .replace(/^9720/, '972'); // תיקון 9720 ל-972
+
     try {
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: testRecipient,
+          to: cleanedRecipient,
           text: "Hello! This is a live test message from FlowBot App Review Console. Integration confirmed.",
           accessToken: accessToken,
           phoneId: selectedNumber
@@ -123,8 +128,12 @@ export default function WhatsappConnectionPage() {
       });
 
       const data = await res.json();
-      if (data.ok) {
+      if (data.ok || data.success) {
         setTestSent(true);
+      } else {
+        console.error("API error:", data);
+        // אם ה-API מחזיר שגיאה, ננסה להבין אם זה בגלל טוקן שפקע
+        setErrorMessage(data.error?.message || "Send failed");
       }
     } catch (error) {
       console.error("Test send failed", error);
@@ -271,6 +280,9 @@ export default function WhatsappConnectionPage() {
                   <motion.p initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="text-center text-xs font-bold text-green-600 uppercase tracking-tighter">
                     Verification Complete! Check your WhatsApp device.
                   </motion.p>
+                )}
+                {errorMessage && (
+                  <p className="text-center text-xs font-bold text-red-500 uppercase">{errorMessage}</p>
                 )}
               </motion.div>
             )}
