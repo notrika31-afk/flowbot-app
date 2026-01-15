@@ -27,8 +27,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, mock: true }, { status: 200 });
     }
 
-    // שימוש בגרסה v20.0 כפי שמופיע בקוד המקורי שלך
-    const url = `https://graph.facebook.com/v20.0/${PHONE_ID}/messages`;
+    // עדכון לגרסה v22.0 כפי שמופיע בלוח הבקרה שלך בתמונה 7
+    const url = `https://graph.facebook.com/v22.0/${PHONE_ID}/messages`;
     
     const res = await fetch(url, {
       method: "POST",
@@ -38,8 +38,9 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         messaging_product: "whatsapp",
+        recipient_type: "individual", // הגדרה מפורשת למניעת שגיאת שדות חסרים
         to: to,
-        type: "text", // <--- השדה שהיה חסר וגרם ל-Missing Fields
+        type: "text", 
         text: { body: text },
       }),
     });
