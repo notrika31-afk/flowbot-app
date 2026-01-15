@@ -190,6 +190,7 @@ const PAYMENT_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
     MAIN API HANDLER 
 ============================================================ */
 export async function POST(req: Request) {
+  const startTime = Date.now(); // הוספת זמן התחלה ללוגים לניתוח כפילויות
   try {
     const session = await getUserSession();
     const userId = session?.id;
@@ -225,7 +226,7 @@ export async function POST(req: Request) {
 
     // --- הלוגיקה המקורית שלך ---
     let { message, history = [], phase = "intro", attachments = [], existingFlow = null, isFreshScan = false } = body;
-    console.log("📨 [AI Engine] New message received:", message);
+    console.log(`📨 [AI Engine] [${startTime}] New message received:`, message);
 
     const knowledgeSummary = buildKnowledgeHint(attachments);
 
@@ -235,8 +236,9 @@ export async function POST(req: Request) {
     let siteLink: string | null = null;
     let fullKnowledgeBase = "";
 
+    // שימוש ב-userId מהסשן או מה-body (לוואטסאפ)
     const effectiveUserId = userId || body.userId;
-    console.log("👤 [AI Engine] Effective User ID:", effectiveUserId);
+    console.log(`👤 [AI Engine] [${startTime}] Effective User ID:`, effectiveUserId);
 
     if (effectiveUserId) {
         try {
@@ -312,7 +314,7 @@ export async function POST(req: Request) {
         }
     }
 
-    console.log("🤖 [AI Engine] Sending to AI with", tools.length, "available tools.");
+    console.log(`🤖 [AI Engine] [${startTime}] Sending to AI with`, tools.length, "available tools.");
 
     let response = await openai.chat.completions.create({
       model: "gemini-2.0-flash-exp",
@@ -325,12 +327,12 @@ export async function POST(req: Request) {
     });
 
     let aiMessage = response.choices[0]?.message;
-    console.log("💎 [AI Engine] Raw AI Response Object:", JSON.stringify(aiMessage, null, 2));
+    console.log(`💎 [AI Engine] [${startTime}] Raw AI Response Object:`, JSON.stringify(aiMessage, null, 2));
 
     let replyText = aiMessage?.content || "";
 
     if (aiMessage?.tool_calls && aiMessage.tool_calls.length > 0) {
-      console.log("🛠️ [AI Engine] AI decided to use tools. Count:", aiMessage.tool_calls.length);
+      console.log(`🛠️ [AI Engine] [${startTime}] AI decided to use tools. Count:`, aiMessage.tool_calls.length);
       messagesForAi.push(aiMessage);
       
       for (const toolCall of aiMessage.tool_calls) {
@@ -338,7 +340,7 @@ export async function POST(req: Request) {
         const args = JSON.parse((toolCall as any).function.arguments);
         let toolResult = "";
 
-        console.log(`🚀 [AI Engine] Executing tool: ${fnName}`, args);
+        console.log(`🚀 [AI Engine] [${startTime}] Executing tool: ${fnName}`, args);
 
         try {
           if (fnName === "calendar_check_availability" && effectiveUserId) {
@@ -354,7 +356,7 @@ export async function POST(req: Request) {
                 attendeeEmail: args.email 
             });
             toolResult = JSON.stringify({ status: "success", event_link: event.link });
-            console.log("✅ [AI Engine] Calendar event created:", event.link);
+            console.log(`✅ [AI Engine] [${startTime}] Calendar event created:`, event.link);
           }
           else if (fnName === "append_sheets_row" && effectiveUserId) {
              const conn = await prisma.integrationConnection.findUnique({ 
@@ -386,7 +388,7 @@ export async function POST(req: Request) {
               toolResult = JSON.stringify({ status: "success", payment_link: "https://stripe.com/mock" });
           }
         } catch (err: any) { 
-            console.error(`❌ [AI Engine] Error in tool ${fnName}:`, err.message);
+            console.error(`❌ [AI Engine] [${startTime}] Error in tool ${fnName}:`, err.message);
             toolResult = JSON.stringify({ status: "error", message: err.message }); 
         }
 
@@ -408,6 +410,7 @@ export async function POST(req: Request) {
         replyText = replyText.replace(raw, "").replace(/<\/?FLOW_JSON>/g, "").replace(/```json|```/g, "").trim();
     }
 
+    console.log(`🏁 [AI Engine] [${startTime}] Request completed in ${Date.now() - startTime}ms`);
     return NextResponse.json({
       reply: replyText,
       flow: flowJson,
@@ -415,7 +418,7 @@ export async function POST(req: Request) {
     });
 
   } catch (error) {
-    console.error("❌ [AI Engine] Global Error:", error);
+    console.error(`❌ [AI Engine] [${startTime}] Global Error:`, error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });
   }
 }
