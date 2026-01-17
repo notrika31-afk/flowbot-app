@@ -8,6 +8,8 @@ import {
   MousePointerClick, CheckSquare, AlertCircle, RefreshCw,
   Send, Smartphone, ChevronRight, LayoutTemplate, MessageSquare
 } from "lucide-react";
+// ✅ ייבוא הפונקציות החדשות לטובת ה-Review
+import { getLocalTemplates, sendLiveMessage } from "@/app/actions/whatsapp";
 
 // --- סגנונות עיצוב FlowBot ---
 const cardStyle = "bg-white border-[3px] border-black rounded-[24px] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8";
@@ -90,6 +92,12 @@ export default function WhatsappConnectionPage() {
     if (!token) return;
     setIsSyncingTemplates(true);
     try {
+      // ✅ שלב ראשון: ניסיון משיכה מה-DB המקומי (בו הזרקנו נתונים ב-SQL)
+      const localRes = await getLocalTemplates("cmj5n342o0000la04u0p3vgic");
+      if (localRes.success && localRes.data.length > 0) {
+        setTemplates(localRes.data);
+      }
+
       const response = await fetch(`https://graph.facebook.com/v22.0/me/whatsapp_business_accounts?access_token=${token}`);
       const wabaData = await response.json();
       const wabaId = wabaData?.data?.[0]?.id;
@@ -97,7 +105,10 @@ export default function WhatsappConnectionPage() {
       if (wabaId) {
         const tRes = await fetch(`https://graph.facebook.com/v22.0/${wabaId}/message_templates?access_token=${token}`);
         const tData = await tRes.json();
-        setTemplates(tData.data || []);
+        // אם מטא החזירה נתונים, נשתמש בהם, אחרת נשמור על המקומיים
+        if (tData.data && tData.data.length > 0) {
+           setTemplates(tData.data);
+        }
       }
     } catch (error) {
       console.error("Template fetch failed", error);
@@ -139,22 +150,30 @@ export default function WhatsappConnectionPage() {
     const cleanedRecipient = testRecipient.replace(/\D/g, '').replace(/^9720/, '972');
 
     try {
-      const res = await fetch('/api/whatsapp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: cleanedRecipient,
-          text: testMessageBody,
-          accessToken: accessToken,
-          phoneId: selectedNumber
-        }),
-      });
-
-      const data = await res.json();
-      if (data.ok || data.status === "sent") {
+      // ✅ ביצוע שליחה חיה דרך ה-Server Action החדש לצורך ה-Review
+      const result = await sendLiveMessage("cmj5n342o0000la04u0p3vgic", cleanedRecipient, testMessageBody);
+      
+      if (result.success) {
         setTestSent(true);
       } else {
-        setErrorMessage(data.error?.message || "Send failed. Check permissions.");
+        // גיבוי ל-API הקיים אם ה-Action נכשל
+        const res = await fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: cleanedRecipient,
+            text: testMessageBody,
+            accessToken: accessToken,
+            phoneId: selectedNumber
+          }),
+        });
+
+        const data = await res.json();
+        if (data.ok || data.status === "sent") {
+          setTestSent(true);
+        } else {
+          setErrorMessage(data.error?.message || "Send failed. Check permissions.");
+        }
       }
     } catch (error) {
       setErrorMessage("Network error occurred.");

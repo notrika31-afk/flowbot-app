@@ -47,3 +47,58 @@ export async function syncWhatsAppTemplates(userId: string) {
 
   return { success: true, count: templates.length };
 }
+
+// 📜 ✅ פונקציה חדשה: משיכת תבניות מה-DB המקומי (עבור ה-Review)
+// פונקציה זו תוודא שהתבניות שהזרקנו ב-SQL יופיעו בטבלה באתר
+export async function getLocalTemplates(userId: string) {
+  try {
+    const templates = await prisma.whatsAppTemplate.findMany({
+      where: { userId: userId },
+      orderBy: { createdAt: 'desc' }
+    });
+    return { success: true, data: templates };
+  } catch (error) {
+    console.error("Database Error:", error);
+    return { success: false, data: [] };
+  }
+}
+
+// 💬 ✅ פונקציה חדשה: שליחת הודעה חיה (Live Messaging)
+// פונקציה זו תגרום לכפתור ה-Send בממשק באמת לשלוח הודעה לוואטסאפ שלך
+export async function sendLiveMessage(userId: string, to: string, message: string) {
+  try {
+    const config = await prisma.whatsAppConfig.findUnique({
+      where: { userId },
+    });
+
+    if (!config || !config.accessToken || !config.phoneNumberId) {
+      throw new Error("Missing WhatsApp configuration");
+    }
+
+    const response = await fetch(
+      `https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${config.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: to,
+          type: "text",
+          text: { body: message },
+        }),
+      }
+    );
+
+    const result = await response.json();
+    
+    if (result.error) throw new Error(result.error.message);
+    
+    return { success: true, data: result };
+  } catch (error: any) {
+    console.error("Send Error:", error);
+    return { success: false, error: error.message };
+  }
+}
