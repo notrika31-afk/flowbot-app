@@ -11,19 +11,19 @@ generator client {
 // 🧑‍💼 טבלת משתמשים (בעלי העסק)
 // ---------------------------------------------------------
 model User {
-  id               String    @id @default(cuid())
-  email            String    @unique
-  name             String?
-  password         String?
-  phone            String?
-  emailVerified    DateTime?
-  image            String?
+  id                String    @id @default(cuid())
+  email             String    @unique
+  name              String?
+  password          String?
+  phone             String?
+  emailVerified     DateTime?
+  image             String?
 
   // נתוני מנוי (SaaS)
-  plan             UserPlan  @default(FREE)
-  stripeCustomerId String?
-  subscriptionId   String?
-  subscriptionEnd  DateTime?
+  plan              UserPlan  @default(FREE)
+  stripeCustomerId  String?
+  subscriptionId    String?
+  subscriptionEnd   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -32,16 +32,19 @@ model User {
   businessDescription String? @db.Text
 
   // קשרים
-  bots            Bot[]
-  wabaConnections WabaConnection[]
-  hostedNumbers   HostedNumber[]
-  integrations    IntegrationConnection[]
-  sessions        Session[]
-  mfaCodes        MfaCode[]
-  accounts        Account[]
+  bots             Bot[]
+  wabaConnections  WabaConnection[]
+  hostedNumbers    HostedNumber[]
+  integrations     IntegrationConnection[]
+  sessions         Session[]
+  mfaCodes         MfaCode[]
+  accounts         Account[]
   
   // ✅ חדש: חיבור להגדרות וואטסאפ (Embedded Signup)
   whatsappConfig WhatsAppConfig?
+
+  // ✅ תוספת עבור אישור מטא: קשר לתבניות וואטסאפ
+  whatsappTemplates WhatsAppTemplate[]
 }
 
 enum UserPlan {
@@ -78,10 +81,10 @@ model Bot {
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   // רכיבי הבוט
-  flows    Flow[]
-  messages Message[]
-  contacts Contact[]
-  sessions ConversationSession[]
+  flows     Flow[]
+  messages  Message[]
+  contacts  Contact[]
+  sessions  ConversationSession[]
 
   // מאגר ידע
   knowledgeSources KnowledgeSource[]
@@ -183,6 +186,10 @@ model Message {
   content   String
   status    MessageStatus    @default(SENT)
   metadata  Json?
+  
+  // ✅ תוספת עבור אישור מטא: שמירת שם תבנית בשליחה יזומה
+  templateName String?
+
   createdAt DateTime         @default(now())
 
   bot     Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
@@ -247,10 +254,10 @@ enum SessionStatus {
 // ---------------------------------------------------------
 model WabaConnection {
   id             String   @id @default(cuid())
-  userId         String   @unique  // <--- עכשיו זה ייחודי ויתמוך ב-Upsert
+  userId         String   @unique  
   botId          String?  @unique
-  wabaId         String?  // אופציונלי למניעת קריסות
-  phoneNumberId  String?  // אופציונלי למניעת קריסות
+  wabaId         String?  
+  phoneNumberId  String?  
   accessToken    String?
   verifyToken    String?
   phoneNumber    String?
@@ -263,7 +270,7 @@ model WabaConnection {
 
   @@index([userId])
 }
-// המודל לניהול Embedded Signup
+
 model WhatsAppConfig {
   id             String   @id @default(cuid())
   userId         String   @unique 
@@ -298,7 +305,6 @@ model HostedNumber {
   @@index([userId])
 }
 
-// המודל הראשי שבו אנחנו משתמשים לאינטגרציות (גוגל, סטרייפ וכו')
 model IntegrationConnection {
   id           String            @id @default(cuid())
   userId       String
@@ -404,4 +410,33 @@ model MfaCode {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------
+// 📜 ✅ מודלים חדשים לאישור מטא (WhatsApp Management)
+// ---------------------------------------------------------
+
+model WhatsAppTemplate {
+  id            String         @id @default(cuid())
+  userId        String
+  name          String         
+  category      String         
+  language      String         
+  status        TemplateStatus @default(PENDING)
+  content       Json?          
+  metaTemplateId String?       @unique 
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum TemplateStatus {
+  APPROVED
+  PENDING
+  REJECTED
+  PAUSED
+  DELETED
 }
