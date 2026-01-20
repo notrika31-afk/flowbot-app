@@ -21,24 +21,29 @@ async function sendDirectWhatsApp(phoneId: string, token: string, to: string, te
 
 async function createGoogleCalendarEvent(accessToken: string, eventData: any) {
   const { date, time, name, service, start_time, summary } = eventData;
-  // תמיכה גם בפורמט הישן וגם בפורמט ISO שה-AI החדש שולח
+  // תמיכה גם בפורמט הישן וגם בפורמט ISO
   const startDateTime = start_time || `${date}T${time}:00Z`;
-  const eventSummary = summary || `${service}: ${name}`;
+  
+  // הזרקת השם האמיתי לסיכום האירוע אם הוא קיים
+  const eventSummary = summary || `${service || 'פגישה'}: ${name}`;
   
   return fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       summary: eventSummary,
-      start: { dateTime: startDateTime },
-      end: { dateTime: new Date(new Date(startDateTime).getTime() + 60 * 60 * 1000).toISOString() },
+      start: { dateTime: startDateTime, timeZone: "Asia/Jerusalem" },
+      end: { 
+        dateTime: new Date(new Date(startDateTime).getTime() + 60 * 60 * 1000).toISOString(),
+        timeZone: "Asia/Jerusalem" 
+      },
     }),
   });
 }
 
 async function appendGoogleSheetsRow(accessToken: string, sheetData: any) {
   const { spreadsheetId, values } = sheetData;
-  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A1:append?valueInputOption=USER_ENTERED`, {
+  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ values: [values] }),
@@ -68,8 +73,9 @@ export async function POST(req: Request) {
 
     const userPhone = message.from;
     const incomingText = message.text?.body || "";
+    const metaProfileName = value?.contacts?.[0]?.profile?.name || "WhatsApp User";
 
-    // 2. ניהול איש קשר (Contact) - חובה לפי ה-Schema שלך
+    // 2. ניהול איש קשר (Contact)
     const contact = await prisma.contact.upsert({
       where: {
         botId_phone: {
@@ -78,23 +84,24 @@ export async function POST(req: Request) {
         },
       },
       update: {
-        name: value?.contacts?.[0]?.profile?.name || "WhatsApp User"
+        // אנחנו לא דורסים שם קיים בשם גנרי של מטא
+        name: metaProfileName !== "WhatsApp User" ? metaProfileName : undefined 
       },
       create: {
         botId: connection.botId!,
         phone: userPhone,
-        name: value?.contacts?.[0]?.profile?.name || "WhatsApp User",
+        name: metaProfileName,
       },
     });
 
-    // 3. שליפת היסטוריית השיחה - הגדלנו ל-12 הודעות לזיכרון טוב יותר בין ימים
+    // 3. שליפת היסטוריית השיחה
     const pastMessages = await prisma.message.findMany({
       where: { contactId: contact.id },
       orderBy: { createdAt: "asc" },
       take: 12
     });
 
-    // 4. שמירת ההודעה הנכנסת (INCOMING, TEXT)
+    // 4. שמירת ההודעה הנכנסת
     await prisma.message.create({
       data: {
         content: incomingText,
@@ -105,10 +112,8 @@ export async function POST(req: Request) {
       }
     });
 
-    // 5. פנייה ל-AI Engine עם ההיסטוריה וההודעה הנוכחית
+    // 5. פנייה ל-AI Engine
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get("host")}`;
-    
-    // הוספת זמן נוכחי כדי שהבוט ידע להבדיל בין "היום" ל"אתמול"
     const timestamp = new Date().toISOString();
 
     const aiResponse = await fetch(`${baseUrl}/api/ai/engine`, {
@@ -119,7 +124,7 @@ export async function POST(req: Request) {
         history: pastMessages.map(h => ({ 
           role: h.direction === "INCOMING" ? "user" : "assistant", 
           content: h.content,
-          timestamp: h.createdAt // הוספת זמן לכל הודעה בהיסטוריה
+          timestamp: h.createdAt 
         })),
         phase: "simulate",
         existingFlow: connection.bot.flowData,
@@ -128,18 +133,14 @@ export async function POST(req: Request) {
       }),
     });
 
-    if (!aiResponse.ok) {
-        const errorText = await aiResponse.text();
-        console.error("AI Engine Error:", errorText);
-        throw new Error(`AI Engine failed: ${aiResponse.status}`);
-    }
+    if (!aiResponse.ok) throw new Error(`AI Engine failed: ${aiResponse.status}`);
 
     const aiData = await aiResponse.json();
     let finalReply = aiData.reply || aiData.message;
 
     if (!finalReply) return new NextResponse("AI_NO_REPLY", { status: 200 });
 
-    // 6. בדיקת אינטגרציות גוגל (קלנדר ושיטס)
+    // 6. בדיקת אינטגרציות גוגל עם הזרקת נתונים (Data Injection)
     const integrations = await prisma.integrationConnection.findMany({
       where: { userId: connection.userId }
     });
@@ -149,22 +150,41 @@ export async function POST(req: Request) {
     );
 
     if (googleInteg?.accessToken) {
-      // ביצוע קלנדר אם יש פקודה (Regex תומך גם ב-Tool Calls אם הם מוחזרים כטקסט)
+      // --- טיפול ביומן ---
       const calendarMatch = finalReply.match(/\[CREATE_CALENDAR_EVENT: (.*?)\]/);
       if (calendarMatch) {
         try {
-          await createGoogleCalendarEvent(googleInteg.accessToken, JSON.parse(calendarMatch[1]));
+          const rawEventData = JSON.parse(calendarMatch[1]);
+          // הזרקת נתונים: מוודאים שהשם ביומן הוא השם מהפרופיל/שיחה
+          rawEventData.name = contact.name; 
+          rawEventData.summary = `פגישה עם ${contact.name} (${userPhone})`;
+          
+          await createGoogleCalendarEvent(googleInteg.accessToken, rawEventData);
           finalReply = finalReply.replace(/\[CREATE_CALENDAR_EVENT:.*?\]/, "").trim();
         } catch (e) {
           console.error("Calendar Error:", e);
         }
       }
 
-      // ביצוע שיטס אם יש פקודה
+      // --- טיפול בשיטס ---
       const sheetsMatch = finalReply.match(/\[CREATE_SHEETS_ROW: (.*?)\]/);
       if (sheetsMatch) {
         try {
-          await appendGoogleSheetsRow(googleInteg.accessToken, JSON.parse(sheetsMatch[1]));
+          const rawSheetData = JSON.parse(sheetsMatch[1]);
+          
+          // הזרקת נתונים קריטית: דורסים את עמודות השם והטלפון בנתונים האמיתיים
+          // אנחנו מניחים שה-AI שולח מערך values. אנחנו נבטיח שהשם והטלפון שם.
+          const finalValues = [
+            contact.name,   // עמודה A: שם אמיתי
+            userPhone,      // עמודה B: טלפון אמיתי
+            ...(Array.isArray(rawSheetData.values) ? rawSheetData.values.slice(2) : [])
+          ];
+          
+          await appendGoogleSheetsRow(googleInteg.accessToken, {
+            spreadsheetId: rawSheetData.spreadsheetId,
+            values: finalValues
+          });
+          
           finalReply = finalReply.replace(/\[CREATE_SHEETS_ROW:.*?\]/, "").trim();
         } catch (e) {
           console.error("Sheets Error:", e);
@@ -172,7 +192,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 7. שמירת תגובת הבוט ב-DB (OUTGOING)
+    // 7. שמירת תגובת הבוט
     await prisma.message.create({
       data: {
         content: finalReply,
