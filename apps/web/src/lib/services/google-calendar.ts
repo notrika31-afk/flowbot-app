@@ -14,22 +14,24 @@ interface CreateEventParams {
 
 const BOT_CALENDAR_NAME = "FlowBot Appointments";
 
+// ==========================================
+// 1. Google Calendar Service (הקוד המקורי שלך)
+// ==========================================
 export const googleCalendarService = {
   
-  // --- 1. השגת קליינט מאומת (ללא שינוי) ---
-  async getAuthClient(userId: string) {
+  // השגת קליינט מאומת - עודכן לתמיכה דינמית ב-Provider
+  async getAuthClient(userId: string, provider: any = "GOOGLE_CALENDAR") {
     const connection = await prisma.integrationConnection.findUnique({
       where: {
         userId_provider: {
           userId,
-          // התיקון: שימוש ב-as any כדי לאלץ את המערכת להשתמש בערך המילולי
-          provider: IntegrationProvider.GOOGLE_CALENDAR as any,
+          provider: provider as any,
         },
       },
     });
 
     if (!connection || !connection.refreshToken) {
-      throw new Error("User is not connected to Google Calendar");
+      throw new Error(`User is not connected to ${provider}`);
     }
 
     const oAuth2Client = new google.auth.OAuth2(
@@ -43,7 +45,6 @@ export const googleCalendarService = {
       expiry_date: connection.expiresAt ? connection.expiresAt.getTime() : undefined,
     });
 
-    // מנגנון Refresh Token (אותו דבר כמו קודם)
     const isExpired = connection.expiresAt 
       ? new Date().getTime() > connection.expiresAt.getTime() - 5 * 60 * 1000 
       : true;
@@ -70,22 +71,15 @@ export const googleCalendarService = {
     return oAuth2Client;
   },
 
-  // --- 2. פונקציית עזר: מציאת/יצירת יומן הבוט ---
   async getOrCreateBotCalendarId(auth: any): Promise<string> {
     const calendar = google.calendar({ version: "v3", auth });
-
-    // א. ננסה למצוא יומן קיים בשם המיוחד
     const calendarList = await calendar.calendarList.list();
     const existingCal = calendarList.data.items?.find(
       (cal) => cal.summary === BOT_CALENDAR_NAME
     );
 
-    if (existingCal && existingCal.id) {
-      return existingCal.id;
-    }
+    if (existingCal && existingCal.id) return existingCal.id;
 
-    // ב. אם לא קיים - ניצור אחד חדש
-    console.log(`[Google Service] Creating new calendar: ${BOT_CALENDAR_NAME}`);
     const newCal = await calendar.calendars.insert({
       requestBody: {
         summary: BOT_CALENDAR_NAME,
@@ -94,19 +88,13 @@ export const googleCalendarService = {
       }
     });
 
-    if (!newCal.data.id) {
-      throw new Error("Failed to create bot calendar");
-    }
-
+    if (!newCal.data.id) throw new Error("Failed to create bot calendar");
     return newCal.data.id;
   },
 
-  // --- 3. בדיקת זמינות (מעודכן: בודק בראשי + ביומן הבוט יחד) ---
   async listBusySlots(userId: string, timeMin: string, timeMax: string) {
     const auth = await this.getAuthClient(userId);
     const calendar = google.calendar({ version: "v3", auth });
-    
-    // משיגים את ה-ID של יומן הבוט כדי לבדוק גם אותו
     const botCalendarId = await this.getOrCreateBotCalendarId(auth);
 
     const response = await calendar.freebusy.query({
@@ -114,14 +102,10 @@ export const googleCalendarService = {
         timeMin,
         timeMax,
         timeZone: "Asia/Jerusalem",
-        items: [
-          { id: "primary" }, 
-          { id: botCalendarId }
-        ] 
+        items: [{ id: "primary" }, { id: botCalendarId }] 
       }
     });
 
-    // איחוד כל הזמנים התפוסים משני היומנים
     const primaryBusy = response.data.calendars?.["primary"]?.busy || [];
     const botBusy = response.data.calendars?.[botCalendarId]?.busy || [];
     const allBusy = [...primaryBusy, ...botBusy];
@@ -133,14 +117,11 @@ export const googleCalendarService = {
     }));
   },
 
-  // --- 4. יצירת אירוע (מעודכן: הגנה מפני זמן סיום חסר) ---
   async createEvent(userId: string, params: CreateEventParams) {
     const auth = await this.getAuthClient(userId);
     const calendar = google.calendar({ version: "v3", auth });
-
     const targetCalendarId = await this.getOrCreateBotCalendarId(auth);
 
-    // וידוא שזמן הסיום הוא לפחות שעה אחרי ההתחלה (למנוע שגיאות של גוגל)
     let endDateTime = params.endTime;
     if (params.startTime === params.endTime) {
        endDateTime = new Date(new Date(params.startTime).getTime() + 60 * 60 * 1000).toISOString();
@@ -149,14 +130,8 @@ export const googleCalendarService = {
     const event = {
       summary: params.summary,
       description: params.description || "נקבע ע״י FlowBot",
-      start: {
-        dateTime: params.startTime,
-        timeZone: "Asia/Jerusalem",
-      },
-      end: {
-        dateTime: endDateTime,
-        timeZone: "Asia/Jerusalem",
-      },
+      start: { dateTime: params.startTime, timeZone: "Asia/Jerusalem" },
+      end: { dateTime: endDateTime, timeZone: "Asia/Jerusalem" },
       attendees: params.attendeeEmail ? [{ email: params.attendeeEmail }] : [],
     };
 
@@ -165,12 +140,27 @@ export const googleCalendarService = {
       requestBody: event,
     });
 
-    console.log(`[Google Service] Event created successfully in '${BOT_CALENDAR_NAME}'`);
-    
-    return {
-      id: response.data.id,
-      link: response.data.htmlLink,
-      status: "confirmed"
-    };
+    return { id: response.data.id, link: response.data.htmlLink, status: "confirmed" };
+  }
+};
+
+// ==========================================
+// 2. Google Sheets Service (התוספת החדשה)
+// ==========================================
+export const googleSheetsService = {
+  
+  async appendDynamicRow(userId: string, spreadsheetId: string, dataArray: any[]) {
+    // שימוש באותה פונקציית Auth עם ה-Provider של Sheets
+    const auth = await googleCalendarService.getAuthClient(userId, "GOOGLE_SHEETS");
+    const sheets = google.sheets({ version: "v4", auth });
+
+    return await sheets.spreadsheets.values.append({
+      spreadsheetId: spreadsheetId,
+      range: "Sheet1!A1", 
+      valueInputOption: "USER_ENTERED",
+      requestBody: {
+        values: [dataArray], 
+      },
+    });
   }
 };
