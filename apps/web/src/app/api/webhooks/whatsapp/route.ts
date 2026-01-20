@@ -30,15 +30,19 @@ async function createGoogleCalendarEvent(accessToken: string, eventData: any) {
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       summary: eventSummary,
-      start: { dateTime: startDateTime },
-      end: { dateTime: new Date(new Date(startDateTime).getTime() + 60 * 60 * 1000).toISOString() },
+      start: { dateTime: startDateTime, timeZone: "Asia/Jerusalem" },
+      end: { 
+        dateTime: new Date(new Date(startDateTime).getTime() + 60 * 60 * 1000).toISOString(),
+        timeZone: "Asia/Jerusalem"
+      },
     }),
   });
 }
 
 async function appendGoogleSheetsRow(accessToken: string, sheetData: any) {
   const { spreadsheetId, values } = sheetData;
-  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A1:append?valueInputOption=USER_ENTERED`, {
+  // תיקון הטווח ל-Sheet1!A1 למניעת שגיאות ב-API
+  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ values: [values] }),
@@ -69,7 +73,8 @@ export async function POST(req: Request) {
     const userPhone = message.from;
     const incomingText = message.text?.body || "";
 
-    // 2. ניהול איש קשר (Contact) - חובה לפי ה-Schema שלך
+    // 2. ניהול איש קשר (Contact)
+    const metaProfileName = value?.contacts?.[0]?.profile?.name;
     const contact = await prisma.contact.upsert({
       where: {
         botId_phone: {
@@ -78,16 +83,17 @@ export async function POST(req: Request) {
         },
       },
       update: {
-        name: value?.contacts?.[0]?.profile?.name || "WhatsApp User"
+        // עדכון שם רק אם קיבלנו שם אמיתי ממטא
+        name: metaProfileName && metaProfileName !== "WhatsApp User" ? metaProfileName : undefined
       },
       create: {
         botId: connection.botId!,
         phone: userPhone,
-        name: value?.contacts?.[0]?.profile?.name || "WhatsApp User",
+        name: metaProfileName || "WhatsApp User",
       },
     });
 
-    // 3. שליפת היסטוריית השיחה - הגדלנו ל-12 הודעות לזיכרון טוב יותר בין ימים
+    // 3. שליפת היסטוריית השיחה
     const pastMessages = await prisma.message.findMany({
       where: { contactId: contact.id },
       orderBy: { createdAt: "asc" },
@@ -105,10 +111,8 @@ export async function POST(req: Request) {
       }
     });
 
-    // 5. פנייה ל-AI Engine עם ההיסטוריה וההודעה הנוכחית
+    // 5. פנייה ל-AI Engine
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${req.headers.get("host")}`;
-    
-    // הוספת זמן נוכחי כדי שהבוט ידע להבדיל בין "היום" ל"אתמול"
     const timestamp = new Date().toISOString();
 
     const aiResponse = await fetch(`${baseUrl}/api/ai/engine`, {
@@ -119,7 +123,7 @@ export async function POST(req: Request) {
         history: pastMessages.map(h => ({ 
           role: h.direction === "INCOMING" ? "user" : "assistant", 
           content: h.content,
-          timestamp: h.createdAt // הוספת זמן לכל הודעה בהיסטוריה
+          timestamp: h.createdAt
         })),
         phase: "simulate",
         existingFlow: connection.bot.flowData,
@@ -149,22 +153,38 @@ export async function POST(req: Request) {
     );
 
     if (googleInteg?.accessToken) {
-      // ביצוע קלנדר אם יש פקודה (Regex תומך גם ב-Tool Calls אם הם מוחזרים כטקסט)
+      // ביצוע קלנדר
       const calendarMatch = finalReply.match(/\[CREATE_CALENDAR_EVENT: (.*?)\]/);
       if (calendarMatch) {
         try {
-          await createGoogleCalendarEvent(googleInteg.accessToken, JSON.parse(calendarMatch[1]));
+          const calendarData = JSON.parse(calendarMatch[1]);
+          // הזרקת שם אמיתי
+          calendarData.summary = `Meeting with ${contact.name}`;
+          await createGoogleCalendarEvent(googleInteg.accessToken, calendarData);
           finalReply = finalReply.replace(/\[CREATE_CALENDAR_EVENT:.*?\]/, "").trim();
         } catch (e) {
           console.error("Calendar Error:", e);
         }
       }
 
-      // ביצוע שיטס אם יש פקודה
+      // ביצוע שיטס
       const sheetsMatch = finalReply.match(/\[CREATE_SHEETS_ROW: (.*?)\]/);
       if (sheetsMatch) {
         try {
-          await appendGoogleSheetsRow(googleInteg.accessToken, JSON.parse(sheetsMatch[1]));
+          const rawSheetData = JSON.parse(sheetsMatch[1]);
+          const TARGET_SPREADSHEET_ID = "1c889LUSTiH7oFs-Y_KWZ4CrsoOTT9fyAY4ddPXzU7Nc";
+
+          // הזרקת נתונים דינמיים: עמודה A = שם, עמודה B = טלפון
+          const finalValues = [
+            contact.name, 
+            userPhone,
+            ...(Array.isArray(rawSheetData.values) ? rawSheetData.values.slice(2) : [])
+          ];
+
+          await appendGoogleSheetsRow(googleInteg.accessToken, {
+            spreadsheetId: rawSheetData.spreadsheetId || TARGET_SPREADSHEET_ID,
+            values: finalValues
+          });
           finalReply = finalReply.replace(/\[CREATE_SHEETS_ROW:.*?\]/, "").trim();
         } catch (e) {
           console.error("Sheets Error:", e);
